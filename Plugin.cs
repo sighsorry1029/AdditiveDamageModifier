@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -11,22 +11,22 @@ using JetBrains.Annotations;
 using ServerSync;
 using UnityEngine;
 
-namespace ServerSyncModTemplate;
+namespace AdditiveDamageModifier;
 
 [BepInPlugin(ModGUID, ModName, ModVersion)]
-public class ServerSyncModTemplatePlugin : BaseUnityPlugin
+public class AdditiveDamageModifierPlugin : BaseUnityPlugin
 {
-    internal const string ModName = "ServerSyncModTemplate";
+    internal const string ModName = "AdditiveDamageModifier";
     internal const string ModVersion = "1.0.0";
-    internal const string Author = "{Azumatt}";
+    internal const string Author = "Azumatt";
     private const string ModGUID = $"{Author}.{ModName}";
     private static string ConfigFileName = $"{ModGUID}.cfg";
     private static string ConfigFileFullPath = Paths.ConfigPath + Path.DirectorySeparatorChar + ConfigFileName;
     internal static string ConnectionError = "";
     private readonly Harmony _harmony = new(ModGUID);
-    public static readonly ManualLogSource ServerSyncModTemplateLogger = BepInEx.Logging.Logger.CreateLogSource(ModName);
+    public static readonly ManualLogSource AdditiveDamageModifierLogger = BepInEx.Logging.Logger.CreateLogSource(ModName);
     private static readonly ConfigSync ConfigSync = new(ModGUID) { DisplayName = ModName, CurrentVersion = ModVersion, MinimumRequiredVersion = ModVersion };
-    private FileSystemWatcher _watcher;
+    private FileSystemWatcher? _watcher;
     private readonly object _reloadLock = new();
     private DateTime _lastConfigReloadTime;
     private const long RELOAD_DELAY = 10000000; // One second
@@ -48,6 +48,15 @@ public class ServerSyncModTemplatePlugin : BaseUnityPlugin
 
         _serverConfigLocked = config("1 - General", "Lock Configuration", Toggle.On, "If on, the configuration is locked and can be changed by server admins only.");
         _ = ConfigSync.AddLockingConfigEntry(_serverConfigLocked);
+
+        _veryWeakPercent = additivePercentConfig("Very Weak Percent", 45f, "Very Weak modifier value. 45 means +45% damage taken.", 800);
+        _weakPercent = additivePercentConfig("Weak Percent", 30f, "Weak modifier value. 30 means +30% damage taken.", 700);
+        _slightlyWeakPercent = additivePercentConfig("Slightly Weak Percent", 15f, "Slightly Weak modifier value. 15 means +15% damage taken.", 600);
+        _neutralPercent = additivePercentConfig("Neutral Percent", 0f, "Neutral modifier value. 0 means no change.", 500);
+        _slightlyResistantPercent = additivePercentConfig("Slightly Resistant Percent", -10f, "Slightly Resistant modifier value. -10 means -10% damage taken.", 400);
+        _resistantPercent = additivePercentConfig("Resistant Percent", -20f, "Resistant modifier value. -20 means -20% damage taken.", 300);
+        _veryResistantPercent = additivePercentConfig("Very Resistant Percent", -30f, "Very Resistant modifier value. -30 means -30% damage taken.", 200);
+        _immunePercent = additivePercentConfig("Immune Percent", -40f, "Immune modifier value. -40 means -40% damage taken.", 100);
 
 
         Assembly assembly = Assembly.GetExecutingAssembly();
@@ -91,19 +100,19 @@ public class ServerSyncModTemplatePlugin : BaseUnityPlugin
         {
             if (!File.Exists(ConfigFileFullPath))
             {
-                ServerSyncModTemplateLogger.LogWarning("Config file does not exist. Skipping reload.");
+                AdditiveDamageModifierLogger.LogWarning("Config file does not exist. Skipping reload.");
                 return;
             }
 
             try
             {
-                ServerSyncModTemplateLogger.LogDebug("Reloading configuration...");
+                AdditiveDamageModifierLogger.LogDebug("Reloading configuration...");
                 SaveWithRespectToConfigSet(true);
-                ServerSyncModTemplateLogger.LogInfo("Configuration reload complete.");
+                AdditiveDamageModifierLogger.LogInfo("Configuration reload complete.");
             }
             catch (Exception ex)
             {
-                ServerSyncModTemplateLogger.LogError($"Error reloading configuration: {ex.Message}");
+                AdditiveDamageModifierLogger.LogError($"Error reloading configuration: {ex.Message}");
             }
         }
 
@@ -134,6 +143,30 @@ public class ServerSyncModTemplatePlugin : BaseUnityPlugin
     #region ConfigOptions
 
     private static ConfigEntry<Toggle> _serverConfigLocked = null!;
+    private static ConfigEntry<float> _veryWeakPercent = null!;
+    private static ConfigEntry<float> _weakPercent = null!;
+    private static ConfigEntry<float> _slightlyWeakPercent = null!;
+    private static ConfigEntry<float> _neutralPercent = null!;
+    private static ConfigEntry<float> _slightlyResistantPercent = null!;
+    private static ConfigEntry<float> _resistantPercent = null!;
+    private static ConfigEntry<float> _veryResistantPercent = null!;
+    private static ConfigEntry<float> _immunePercent = null!;
+
+    internal static float GetConfiguredDelta(HitData.DamageModifier modifier)
+    {
+        return modifier switch
+        {
+            HitData.DamageModifier.VeryWeak => _veryWeakPercent.Value / 100f,
+            HitData.DamageModifier.Weak => _weakPercent.Value / 100f,
+            HitData.DamageModifier.SlightlyWeak => _slightlyWeakPercent.Value / 100f,
+            HitData.DamageModifier.Normal => _neutralPercent.Value / 100f,
+            HitData.DamageModifier.SlightlyResistant => _slightlyResistantPercent.Value / 100f,
+            HitData.DamageModifier.Resistant => _resistantPercent.Value / 100f,
+            HitData.DamageModifier.VeryResistant => _veryResistantPercent.Value / 100f,
+            HitData.DamageModifier.Immune => _immunePercent.Value / 100f,
+            _ => 0f
+        };
+    }
 
     private ConfigEntry<T> config<T>(string group, string name, T value, ConfigDescription description, bool synchronizedSetting = true)
     {
@@ -150,6 +183,18 @@ public class ServerSyncModTemplatePlugin : BaseUnityPlugin
     private ConfigEntry<T> config<T>(string group, string name, T value, string description, bool synchronizedSetting = true)
     {
         return config(group, name, value, new ConfigDescription(description), synchronizedSetting);
+    }
+
+    private ConfigEntry<float> additivePercentConfig(string name, float value, string description, int order)
+    {
+        return config(
+            "2 - Additive Damage",
+            name,
+            value,
+            new ConfigDescription(
+                description,
+                new AcceptableValueRange<float>(-100f, 1000f),
+                new ConfigurationManagerAttributes { Order = order }));
     }
 
     private class ConfigurationManagerAttributes
@@ -189,16 +234,16 @@ public static class KeyboardExtensions
 
 public static class ToggleExtentions
 {
-    extension(ServerSyncModTemplatePlugin.Toggle value)
+    extension(AdditiveDamageModifierPlugin.Toggle value)
     {
         public bool IsOn()
         {
-            return value == ServerSyncModTemplatePlugin.Toggle.On;
+            return value == AdditiveDamageModifierPlugin.Toggle.On;
         }
 
         public bool IsOff()
         {
-            return value == ServerSyncModTemplatePlugin.Toggle.Off;
+            return value == AdditiveDamageModifierPlugin.Toggle.Off;
         }
     }
 }
