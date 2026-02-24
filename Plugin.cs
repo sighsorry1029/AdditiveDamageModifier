@@ -18,7 +18,7 @@ public class AdditiveDamageModifierPlugin : BaseUnityPlugin
 {
     internal const string ModName = "AdditiveDamageModifier";
     internal const string ModVersion = "1.0.0";
-    internal const string Author = "Azumatt";
+    internal const string Author = "sighsorry";
     private const string ModGUID = $"{Author}.{ModName}";
     private static string ConfigFileName = $"{ModGUID}.cfg";
     private static string ConfigFileFullPath = Paths.ConfigPath + Path.DirectorySeparatorChar + ConfigFileName;
@@ -193,7 +193,7 @@ public class AdditiveDamageModifierPlugin : BaseUnityPlugin
             value,
             new ConfigDescription(
                 description,
-                new AcceptableValueRange<float>(-100f, 1000f),
+                new AcceptableValueRange<float>(-100f, 100f),
                 new ConfigurationManagerAttributes { Order = order }));
     }
 
