@@ -17,7 +17,7 @@ namespace AdditiveDamageModifier;
 public class AdditiveDamageModifierPlugin : BaseUnityPlugin
 {
     internal const string ModName = "AdditiveDamageModifier";
-    internal const string ModVersion = "1.0.0";
+    internal const string ModVersion = "1.0.1";
     internal const string Author = "sighsorry";
     private const string ModGUID = $"{Author}.{ModName}";
     private static string ConfigFileName = $"{ModGUID}.cfg";
