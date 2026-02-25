@@ -1,4 +1,7 @@
 using System;
+using System.Collections.Generic;
+using System.Reflection;
+using System.Reflection.Emit;
 using HarmonyLib;
 using UnityEngine;
 
@@ -155,4 +158,54 @@ internal static class HitDataApplyModifierPatch
         __result = finalDamage;
         return false;
     }
+}
+
+internal static class FrostStatusImmunityContext
+{
+    public static HitData.DamageModifier GetModifierForEnv(ref HitData.DamageModifiers modifiers, HitData.DamageType damageType)
+    {
+        HitData.DamageModifier modifier = modifiers.GetModifier(damageType);
+        if (damageType != HitData.DamageType.Frost)
+        {
+            return modifier;
+        }
+
+        float frostDelta = AdditiveDamageMath.ModifierToDelta(modifier);
+        float threshold = GetEnvImmunityFrostThreshold();
+        bool immuneByThreshold = frostDelta <= threshold;
+
+        if (immuneByThreshold)
+        {
+            // Preserve vanilla flow in Player.UpdateEnvStatusEffects:
+            // return a resistant tier so vanilla !isCold/!isFreezing logic runs unchanged.
+            return HitData.DamageModifier.SlightlyResistant;
+        }
+
+        return modifier;
+    }
+
+    private static float GetEnvImmunityFrostThreshold() =>
+        AdditiveDamageModifierPlugin.GetFrostEnvImmunityTriggerDelta();
+}
+
+[HarmonyPatch(typeof(Player), "UpdateEnvStatusEffects")]
+internal static class PlayerEnvStatusImmunityPatch
+{
+    private static readonly MethodInfo GetModifierMethod = AccessTools.Method(typeof(HitData.DamageModifiers), nameof(HitData.DamageModifiers.GetModifier));
+    private static readonly MethodInfo GetModifierForEnvMethod = AccessTools.Method(typeof(FrostStatusImmunityContext), nameof(FrostStatusImmunityContext.GetModifierForEnv));
+
+    private static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
+    {
+        foreach (CodeInstruction instruction in instructions)
+        {
+            if (instruction.Calls(GetModifierMethod))
+            {
+                yield return new CodeInstruction(OpCodes.Call, GetModifierForEnvMethod);
+                continue;
+            }
+
+            yield return instruction;
+        }
+    }
+
 }

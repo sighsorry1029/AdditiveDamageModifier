@@ -17,7 +17,7 @@ namespace AdditiveDamageModifier;
 public class AdditiveDamageModifierPlugin : BaseUnityPlugin
 {
     internal const string ModName = "AdditiveDamageModifier";
-    internal const string ModVersion = "1.0.2";
+    internal const string ModVersion = "1.0.3";
     internal const string Author = "sighsorry";
     private const string ModGUID = $"{Author}.{ModName}";
     private static string ConfigFileName = $"{ModGUID}.cfg";
@@ -63,6 +63,14 @@ public class AdditiveDamageModifierPlugin : BaseUnityPlugin
                 "Lower bound for final damage taken after additive sum. 0 means can go down to 0%, 50 means cannot go below 50%.",
                 new AcceptableValueRange<float>(0f, 50f),
                 new ConfigurationManagerAttributes { Order = 50 }));
+        _frostEnvImmunityTriggerFrostDeltaPercent = config(
+            "2 - Additive Damage",
+            "Cold/Freezing Immunity Trigger Frost Delta Percent",
+            -15f,
+            new ConfigDescription(
+                "Shared trigger threshold for Cold and Freezing immunity in Player.UpdateEnvStatusEffects. If effective additive frost delta is <= this value, both Cold and Freezing are blocked/cleared by vanilla flow. -15 means -15%.",
+                new AcceptableValueRange<float>(-100f, 0f),
+                new ConfigurationManagerAttributes { Order = 30 }));
 
 
         Assembly assembly = Assembly.GetExecutingAssembly();
@@ -156,6 +164,7 @@ public class AdditiveDamageModifierPlugin : BaseUnityPlugin
     private static ConfigEntry<float> _resistantPercent = null!;
     private static ConfigEntry<float> _veryResistantPercent = null!;
     private static ConfigEntry<float> _minimumDamageTakenCapPercent = null!;
+    private static ConfigEntry<float> _frostEnvImmunityTriggerFrostDeltaPercent = null!;
 
     internal static float GetConfiguredDelta(HitData.DamageModifier modifier)
     {
@@ -181,6 +190,11 @@ public class AdditiveDamageModifierPlugin : BaseUnityPlugin
     internal static float GetMinimumDeltaCap()
     {
         return GetMinimumDamageTakenMultiplier() - 1f;
+    }
+
+    internal static float GetFrostEnvImmunityTriggerDelta()
+    {
+        return Mathf.Clamp(_frostEnvImmunityTriggerFrostDeltaPercent.Value / 100f, -1f, 0f);
     }
 
     private ConfigEntry<T> config<T>(string group, string name, T value, ConfigDescription description, bool synchronizedSetting = true)
