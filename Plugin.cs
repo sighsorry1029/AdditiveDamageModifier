@@ -57,6 +57,14 @@ public class AdditiveDamageModifierPlugin : BaseUnityPlugin
         _resistantPercent = additivePercentConfig("Resistant Percent", -20f, "Resistant modifier value. -20 means -20% damage taken.", 300);
         _veryResistantPercent = additivePercentConfig("Very Resistant Percent", -30f, "Very Resistant modifier value. -30 means -30% damage taken.", 200);
         _immunePercent = additivePercentConfig("Immune Percent", -40f, "Immune modifier value. -40 means -40% damage taken.", 100);
+        _minimumDamageTakenCapPercent = config(
+            "2 - Additive Damage",
+            "Minimum Damage Taken Cap Percent",
+            0f,
+            new ConfigDescription(
+                "Lower bound for final damage taken after additive sum. 0 means can go down to 0%, 50 means cannot go below 50%.",
+                new AcceptableValueRange<float>(0f, 50f),
+                new ConfigurationManagerAttributes { Order = 50 }));
 
 
         Assembly assembly = Assembly.GetExecutingAssembly();
@@ -151,6 +159,7 @@ public class AdditiveDamageModifierPlugin : BaseUnityPlugin
     private static ConfigEntry<float> _resistantPercent = null!;
     private static ConfigEntry<float> _veryResistantPercent = null!;
     private static ConfigEntry<float> _immunePercent = null!;
+    private static ConfigEntry<float> _minimumDamageTakenCapPercent = null!;
 
     internal static float GetConfiguredDelta(HitData.DamageModifier modifier)
     {
@@ -166,6 +175,16 @@ public class AdditiveDamageModifierPlugin : BaseUnityPlugin
             HitData.DamageModifier.Immune => _immunePercent.Value / 100f,
             _ => 0f
         };
+    }
+
+    internal static float GetMinimumDamageTakenMultiplier()
+    {
+        return Mathf.Clamp(_minimumDamageTakenCapPercent.Value / 100f, 0f, 0.5f);
+    }
+
+    internal static float GetMinimumDeltaCap()
+    {
+        return GetMinimumDamageTakenMultiplier() - 1f;
     }
 
     private ConfigEntry<T> config<T>(string group, string name, T value, ConfigDescription description, bool synchronizedSetting = true)
