@@ -1,4 +1,4 @@
-using System.Reflection;
+using System;
 using HarmonyLib;
 using UnityEngine;
 
@@ -8,9 +8,9 @@ internal static class AdditiveDamageMath
 {
     private const int CustomModifierBase = 100000;
     private const int CustomModifierScale = 1000;
+    private const float CombineClampAbs = 100000f;
     private const float MaxDeltaCap = 100f;
-    private const int CustomModifierMinRaw = 99000;
-    private const int CustomModifierMaxRaw = 200000;
+    private const int CustomModifierThreshold = 10000;
 
     public static HitData.DamageModifier Combine(HitData.DamageModifier current, HitData.DamageModifier incoming)
     {
@@ -20,7 +20,9 @@ internal static class AdditiveDamageMath
         }
 
         float combinedDelta = ModifierToDelta(current) + ModifierToDelta(incoming);
-        combinedDelta = Mathf.Clamp(combinedDelta, AdditiveDamageModifierPlugin.GetMinimumDeltaCap(), MaxDeltaCap);
+        // Do not clamp by the minimum damage cap here; clamping during accumulation makes
+        // the final result order-dependent when several modifiers are combined.
+        combinedDelta = Mathf.Clamp(combinedDelta, -CombineClampAbs, CombineClampAbs);
         return EncodeCustomDelta(combinedDelta);
     }
 
@@ -35,13 +37,68 @@ internal static class AdditiveDamageMath
         return AdditiveDamageModifierPlugin.GetConfiguredDelta(modifier);
     }
 
-    private static bool IsCustomModifier(int rawValue) => rawValue >= CustomModifierMinRaw && rawValue <= CustomModifierMaxRaw;
+    private static bool IsCustomModifier(int rawValue) => rawValue <= -CustomModifierThreshold || rawValue >= CustomModifierThreshold;
 
     private static HitData.DamageModifier EncodeCustomDelta(float delta)
     {
-        float clamped = Mathf.Clamp(delta, AdditiveDamageModifierPlugin.GetMinimumDeltaCap(), MaxDeltaCap);
+        float clamped = Mathf.Clamp(delta, -CombineClampAbs, CombineClampAbs);
         int encoded = CustomModifierBase + Mathf.RoundToInt(clamped * CustomModifierScale);
         return (HitData.DamageModifier)encoded;
+    }
+}
+
+internal static class DamageCapContext
+{
+    [ThreadStatic] private static int _playerDamageContextDepth;
+
+    public static bool UsePlayerMinimumCap => _playerDamageContextDepth > 0;
+
+    public static void Push(bool isPlayerDamageContext)
+    {
+        if (isPlayerDamageContext)
+        {
+            _playerDamageContextDepth++;
+        }
+    }
+
+    public static void Pop(bool wasPlayerDamageContext)
+    {
+        if (!wasPlayerDamageContext || _playerDamageContextDepth <= 0)
+        {
+            return;
+        }
+
+        _playerDamageContextDepth--;
+    }
+}
+
+[HarmonyPatch(typeof(Character), "RPC_Damage")]
+internal static class CharacterRpcDamageContextPatch
+{
+    private static void Prefix(Character __instance, out bool __state)
+    {
+        __state = __instance is Player;
+        DamageCapContext.Push(__state);
+    }
+
+    private static void Postfix(bool __state)
+    {
+        DamageCapContext.Pop(__state);
+    }
+}
+
+[HarmonyPatch(typeof(Character), "Damage")]
+internal static class CharacterDamageContextPatch
+{
+    private static void Prefix(Character __instance, out bool __state)
+    {
+        __state = __instance is Player;
+        DamageCapContext.Push(__state);
+    }
+
+    private static void Postfix(bool __state)
+    {
+        DamageCapContext.Pop(__state);
     }
 }
 
@@ -68,9 +125,12 @@ internal static class HitDataApplyModifierPatch
             return false;
         }
 
-        float minDeltaCap = AdditiveDamageModifierPlugin.GetMinimumDeltaCap();
+        float minimumDamageTakenMultiplier = DamageCapContext.UsePlayerMinimumCap
+            ? AdditiveDamageModifierPlugin.GetMinimumDamageTakenMultiplier()
+            : 0f;
+        float minDeltaCap = minimumDamageTakenMultiplier - 1f;
         float delta = Mathf.Clamp(AdditiveDamageMath.ModifierToDelta(mod), minDeltaCap, 100f);
-        float finalDamage = Mathf.Max(0f, baseDamage * Mathf.Max(AdditiveDamageModifierPlugin.GetMinimumDamageTakenMultiplier(), 1f + delta));
+        float finalDamage = Mathf.Max(0f, baseDamage * Mathf.Max(minimumDamageTakenMultiplier, 1f + delta));
 
         if (Mathf.Approximately(delta, 0f))
         {
@@ -94,49 +154,5 @@ internal static class HitDataApplyModifierPatch
 
         __result = finalDamage;
         return false;
-    }
-}
-
-[HarmonyPatch(typeof(Character), nameof(Character.RPC_Damage))]
-internal static class PlayerImmuneToIgnorePatch
-{
-    private static readonly FieldInfo? DamageModifiersField = AccessTools.Field(typeof(Character), "m_damageModifiers");
-
-    private static void Prefix(Character __instance)
-    {
-        if (__instance is not Player || DamageModifiersField is null)
-        {
-            return;
-        }
-
-        if (DamageModifiersField.GetValue(__instance) is not HitData.DamageModifiers modifiers)
-        {
-            return;
-        }
-
-        bool changed = false;
-
-        if (modifiers.m_chop == HitData.DamageModifier.Immune)
-        {
-            modifiers.m_chop = HitData.DamageModifier.Ignore;
-            changed = true;
-        }
-
-        if (modifiers.m_pickaxe == HitData.DamageModifier.Immune)
-        {
-            modifiers.m_pickaxe = HitData.DamageModifier.Ignore;
-            changed = true;
-        }
-
-        if (modifiers.m_spirit == HitData.DamageModifier.Immune)
-        {
-            modifiers.m_spirit = HitData.DamageModifier.Ignore;
-            changed = true;
-        }
-
-        if (changed)
-        {
-            DamageModifiersField.SetValue(__instance, modifiers);
-        }
     }
 }

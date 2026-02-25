@@ -17,7 +17,7 @@ namespace AdditiveDamageModifier;
 public class AdditiveDamageModifierPlugin : BaseUnityPlugin
 {
     internal const string ModName = "AdditiveDamageModifier";
-    internal const string ModVersion = "1.0.1";
+    internal const string ModVersion = "1.0.2";
     internal const string Author = "sighsorry";
     private const string ModGUID = $"{Author}.{ModName}";
     private static string ConfigFileName = $"{ModGUID}.cfg";
@@ -52,15 +52,13 @@ public class AdditiveDamageModifierPlugin : BaseUnityPlugin
         _veryWeakPercent = additivePercentConfig("Very Weak Percent", 45f, "Very Weak modifier value. 45 means +45% damage taken.", 800);
         _weakPercent = additivePercentConfig("Weak Percent", 30f, "Weak modifier value. 30 means +30% damage taken.", 700);
         _slightlyWeakPercent = additivePercentConfig("Slightly Weak Percent", 15f, "Slightly Weak modifier value. 15 means +15% damage taken.", 600);
-        _neutralPercent = additivePercentConfig("Neutral Percent", 0f, "Neutral modifier value. 0 means no change.", 500);
-        _slightlyResistantPercent = additivePercentConfig("Slightly Resistant Percent", -10f, "Slightly Resistant modifier value. -10 means -10% damage taken.", 400);
-        _resistantPercent = additivePercentConfig("Resistant Percent", -20f, "Resistant modifier value. -20 means -20% damage taken.", 300);
-        _veryResistantPercent = additivePercentConfig("Very Resistant Percent", -30f, "Very Resistant modifier value. -30 means -30% damage taken.", 200);
-        _immunePercent = additivePercentConfig("Immune Percent", -40f, "Immune modifier value. -40 means -40% damage taken.", 100);
+        _slightlyResistantPercent = additivePercentConfig("Slightly Resistant Percent", -15f, "Slightly Resistant modifier value. -15 means -15% damage taken.", 400);
+        _resistantPercent = additivePercentConfig("Resistant Percent", -30f, "Resistant modifier value. -30 means -30% damage taken.", 300);
+        _veryResistantPercent = additivePercentConfig("Very Resistant Percent", -45f, "Very Resistant modifier value. -45 means -45% damage taken.", 200);
         _minimumDamageTakenCapPercent = config(
             "2 - Additive Damage",
-            "Minimum Damage Taken Cap Percent",
-            0f,
+            "Minimum Damage Taken Cap Percent on Player",
+            10f,
             new ConfigDescription(
                 "Lower bound for final damage taken after additive sum. 0 means can go down to 0%, 50 means cannot go below 50%.",
                 new AcceptableValueRange<float>(0f, 50f),
@@ -154,11 +152,9 @@ public class AdditiveDamageModifierPlugin : BaseUnityPlugin
     private static ConfigEntry<float> _veryWeakPercent = null!;
     private static ConfigEntry<float> _weakPercent = null!;
     private static ConfigEntry<float> _slightlyWeakPercent = null!;
-    private static ConfigEntry<float> _neutralPercent = null!;
     private static ConfigEntry<float> _slightlyResistantPercent = null!;
     private static ConfigEntry<float> _resistantPercent = null!;
     private static ConfigEntry<float> _veryResistantPercent = null!;
-    private static ConfigEntry<float> _immunePercent = null!;
     private static ConfigEntry<float> _minimumDamageTakenCapPercent = null!;
 
     internal static float GetConfiguredDelta(HitData.DamageModifier modifier)
@@ -168,11 +164,11 @@ public class AdditiveDamageModifierPlugin : BaseUnityPlugin
             HitData.DamageModifier.VeryWeak => _veryWeakPercent.Value / 100f,
             HitData.DamageModifier.Weak => _weakPercent.Value / 100f,
             HitData.DamageModifier.SlightlyWeak => _slightlyWeakPercent.Value / 100f,
-            HitData.DamageModifier.Normal => _neutralPercent.Value / 100f,
+            HitData.DamageModifier.Normal => 0f,
             HitData.DamageModifier.SlightlyResistant => _slightlyResistantPercent.Value / 100f,
             HitData.DamageModifier.Resistant => _resistantPercent.Value / 100f,
             HitData.DamageModifier.VeryResistant => _veryResistantPercent.Value / 100f,
-            HitData.DamageModifier.Immune => _immunePercent.Value / 100f,
+            HitData.DamageModifier.Immune => -1f,
             _ => 0f
         };
     }
