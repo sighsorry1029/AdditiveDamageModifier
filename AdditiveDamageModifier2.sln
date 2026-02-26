@@ -1,6 +1,6 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ServerSyncModTemplate", "ServerSyncModTemplate.csproj", "{4358610B-F3F4-4843-B7AF-98B7BC60DCDE}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AdditiveDamageModifier2", "AdditiveDamageModifier2.csproj", "{4358610B-F3F4-4843-B7AF-98B7BC60DCDE}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
