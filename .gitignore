@@ -6,3 +6,5 @@ riderModule.iml
 .idea/
 .vs/
 ServerSyncModTemplate.sln.DotSettings.user
+.tmp_checkowner/
+build.diag.log

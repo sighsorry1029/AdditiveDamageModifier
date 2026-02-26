@@ -3,6 +3,12 @@
     <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')"/>
     <Import Project="environment.props"/>
     <PropertyGroup>
+        <NuGetPackageRoot Condition="'$(NuGetPackageRoot)' == '' and '$(NUGET_PACKAGES)' != ''">$(NUGET_PACKAGES)\</NuGetPackageRoot>
+        <NuGetPackageRoot Condition="'$(NuGetPackageRoot)' == '' and Exists('$(USERPROFILE)\.nuget\packages')">$(USERPROFILE)\.nuget\packages\</NuGetPackageRoot>
+        <RuntimeIdentifiers Condition="'$(RuntimeIdentifiers)' == ''">win</RuntimeIdentifiers>
+        <YamlDotNetDllPath>$(NuGetPackageRoot)yamldotnet\16.3.0\lib\net47\YamlDotNet.dll</YamlDotNetDllPath>
+    </PropertyGroup>
+    <PropertyGroup>
         <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
         <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
         <ProjectGuid>{4358610B-F3F4-4843-B7AF-98B7BC60DCDE}</ProjectGuid>
@@ -82,7 +88,7 @@
             <HintPath>Libs\ServerSync.dll</HintPath>
         </Reference>
         <Reference Include="YamlDotNet">
-            <HintPath>$(NuGetPackageRoot)\yamldotnet\16.3.0\lib\net47\YamlDotNet.dll</HintPath>
+            <HintPath>$(YamlDotNetDllPath)</HintPath>
         </Reference>
         <Reference Include="System"/>
         <Reference Include="System.Core"/>

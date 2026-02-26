@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Reflection;
 using System.Reflection.Emit;
@@ -53,8 +53,11 @@ internal static class AdditiveDamageMath
 internal static class DamageCapContext
 {
     [ThreadStatic] private static int _playerDamageContextDepth;
+    [ThreadStatic] private static Stack<HitData.DamageType>? _damageTypeStack;
 
     public static bool UsePlayerMinimumCap => _playerDamageContextDepth > 0;
+    public static HitData.DamageType CurrentDamageType =>
+        _damageTypeStack is { Count: > 0 } stack ? stack.Peek() : HitData.DamageType.Blunt;
 
     public static void Push(bool isPlayerDamageContext)
     {
@@ -72,6 +75,19 @@ internal static class DamageCapContext
         }
 
         _playerDamageContextDepth--;
+    }
+
+    public static void PushDamageType(HitData.DamageType damageType)
+    {
+        (_damageTypeStack ??= new Stack<HitData.DamageType>(4)).Push(damageType);
+    }
+
+    public static void PopDamageType()
+    {
+        if (_damageTypeStack is { Count: > 0 } stack)
+        {
+            stack.Pop();
+        }
     }
 }
 
@@ -105,6 +121,21 @@ internal static class CharacterDamageContextPatch
     }
 }
 
+[HarmonyPatch(typeof(Character), "ApplyDamage")]
+internal static class CharacterApplyDamageContextPatch
+{
+    private static void Prefix(Character __instance, out bool __state)
+    {
+        __state = __instance is Player;
+        DamageCapContext.Push(__state);
+    }
+
+    private static void Postfix(bool __state)
+    {
+        DamageCapContext.Pop(__state);
+    }
+}
+
 [HarmonyPatch(typeof(HitData.DamageModifiers), nameof(HitData.DamageModifiers.ApplyIfBetter))]
 internal static class DamageModifiersApplyIfBetterPatch
 {
@@ -112,6 +143,82 @@ internal static class DamageModifiersApplyIfBetterPatch
     {
         original = AdditiveDamageMath.Combine(original, mod);
         return false;
+    }
+}
+
+[HarmonyPatch(typeof(HitData), nameof(HitData.ApplyResistance))]
+internal static class HitDataApplyResistanceDamageTypeContextPatch
+{
+    private static readonly MethodInfo ApplyModifierMethod = AccessTools.Method(
+        typeof(HitData),
+        nameof(HitData.ApplyModifier),
+        new[] { typeof(float), typeof(HitData.DamageModifier), typeof(float).MakeByRefType(), typeof(float).MakeByRefType(), typeof(float).MakeByRefType(), typeof(float).MakeByRefType() });
+
+    private static readonly MethodInfo ApplyModifierWithTypeMethod = AccessTools.Method(
+        typeof(HitDataApplyResistanceDamageTypeContextPatch),
+        nameof(ApplyModifierWithType));
+
+    private static readonly HitData.DamageType[] ApplyResistanceDamageTypeOrder =
+    {
+        HitData.DamageType.Blunt,
+        HitData.DamageType.Slash,
+        HitData.DamageType.Pierce,
+        HitData.DamageType.Chop,
+        HitData.DamageType.Pickaxe,
+        HitData.DamageType.Fire,
+        HitData.DamageType.Frost,
+        HitData.DamageType.Lightning,
+        HitData.DamageType.Poison,
+        HitData.DamageType.Spirit
+    };
+
+    private static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
+    {
+        int applyModifierCallIndex = 0;
+
+        foreach (CodeInstruction instruction in instructions)
+        {
+            if (instruction.Calls(ApplyModifierMethod))
+            {
+                HitData.DamageType damageType = applyModifierCallIndex < ApplyResistanceDamageTypeOrder.Length
+                    ? ApplyResistanceDamageTypeOrder[applyModifierCallIndex]
+                    : HitData.DamageType.Blunt;
+                applyModifierCallIndex++;
+                yield return new CodeInstruction(OpCodes.Ldc_I4, (int)damageType);
+                yield return new CodeInstruction(OpCodes.Call, ApplyModifierWithTypeMethod);
+                continue;
+            }
+
+            yield return instruction;
+        }
+    }
+
+    private static float ApplyModifierWithType(
+        HitData hitData,
+        float baseDamage,
+        HitData.DamageModifier mod,
+        ref float normalDmg,
+        ref float resistantDmg,
+        ref float weakDmg,
+        ref float immuneDmg,
+        HitData.DamageType damageType)
+    {
+        // Type-specific minimum cap is only used for player-damage context.
+        // Skip context push/pop on every other path to minimize per-hit overhead.
+        if (!DamageCapContext.UsePlayerMinimumCap)
+        {
+            return hitData.ApplyModifier(baseDamage, mod, ref normalDmg, ref resistantDmg, ref weakDmg, ref immuneDmg);
+        }
+
+        DamageCapContext.PushDamageType(damageType);
+        try
+        {
+            return hitData.ApplyModifier(baseDamage, mod, ref normalDmg, ref resistantDmg, ref weakDmg, ref immuneDmg);
+        }
+        finally
+        {
+            DamageCapContext.PopDamageType();
+        }
     }
 }
 
@@ -129,7 +236,7 @@ internal static class HitDataApplyModifierPatch
         }
 
         float minimumDamageTakenMultiplier = DamageCapContext.UsePlayerMinimumCap
-            ? AdditiveDamageModifierPlugin.GetMinimumDamageTakenMultiplier()
+            ? AdditiveDamageModifierPlugin.GetMinimumDamageTakenMultiplier(DamageCapContext.CurrentDamageType)
             : 0f;
         float minDeltaCap = minimumDamageTakenMultiplier - 1f;
         float delta = Mathf.Clamp(AdditiveDamageMath.ModifierToDelta(mod), minDeltaCap, 100f);

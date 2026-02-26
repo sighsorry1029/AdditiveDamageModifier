@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -17,7 +17,7 @@ namespace AdditiveDamageModifier;
 public class AdditiveDamageModifierPlugin : BaseUnityPlugin
 {
     internal const string ModName = "AdditiveDamageModifier";
-    internal const string ModVersion = "1.0.3";
+    internal const string ModVersion = "1.0.4";
     internal const string Author = "sighsorry";
     private const string ModGUID = $"{Author}.{ModName}";
     private static string ConfigFileName = $"{ModGUID}.cfg";
@@ -55,14 +55,13 @@ public class AdditiveDamageModifierPlugin : BaseUnityPlugin
         _slightlyResistantPercent = additivePercentConfig("Slightly Resistant Percent", -15f, "Slightly Resistant modifier value. -15 means -15% damage taken.", 400);
         _resistantPercent = additivePercentConfig("Resistant Percent", -30f, "Resistant modifier value. -30 means -30% damage taken.", 300);
         _veryResistantPercent = additivePercentConfig("Very Resistant Percent", -45f, "Very Resistant modifier value. -45 means -45% damage taken.", 200);
-        _minimumDamageTakenCapPercent = config(
-            "2 - Additive Damage",
-            "Minimum Damage Taken Cap Percent on Player",
-            10f,
-            new ConfigDescription(
-                "Lower bound for final damage taken after additive sum. 0 means can go down to 0%, 50 means cannot go below 50%.",
-                new AcceptableValueRange<float>(0f, 50f),
-                new ConfigurationManagerAttributes { Order = 50 }));
+        _minimumDamageTakenCapPercentBlunt = playerMinimumDamageCapConfig("Minimum Damage Taken Cap Percent on Player - Blunt", 10f, 190);
+        _minimumDamageTakenCapPercentPierce = playerMinimumDamageCapConfig("Minimum Damage Taken Cap Percent on Player - Pierce", 10f, 180);
+        _minimumDamageTakenCapPercentSlash = playerMinimumDamageCapConfig("Minimum Damage Taken Cap Percent on Player - Slash", 10f, 170);
+        _minimumDamageTakenCapPercentFire = playerMinimumDamageCapConfig("Minimum Damage Taken Cap Percent on Player - Fire", 10f, 160);
+        _minimumDamageTakenCapPercentPoison = playerMinimumDamageCapConfig("Minimum Damage Taken Cap Percent on Player - Poison", 10f, 150);
+        _minimumDamageTakenCapPercentFrost = playerMinimumDamageCapConfig("Minimum Damage Taken Cap Percent on Player - Frost", 10f, 140);
+        _minimumDamageTakenCapPercentLightning = playerMinimumDamageCapConfig("Minimum Damage Taken Cap Percent on Player - Lightning", 10f, 130);
         _frostEnvImmunityTriggerFrostDeltaPercent = config(
             "2 - Additive Damage",
             "Cold/Freezing Immunity Trigger Frost Delta Percent",
@@ -163,7 +162,13 @@ public class AdditiveDamageModifierPlugin : BaseUnityPlugin
     private static ConfigEntry<float> _slightlyResistantPercent = null!;
     private static ConfigEntry<float> _resistantPercent = null!;
     private static ConfigEntry<float> _veryResistantPercent = null!;
-    private static ConfigEntry<float> _minimumDamageTakenCapPercent = null!;
+    private static ConfigEntry<float> _minimumDamageTakenCapPercentBlunt = null!;
+    private static ConfigEntry<float> _minimumDamageTakenCapPercentPierce = null!;
+    private static ConfigEntry<float> _minimumDamageTakenCapPercentSlash = null!;
+    private static ConfigEntry<float> _minimumDamageTakenCapPercentFire = null!;
+    private static ConfigEntry<float> _minimumDamageTakenCapPercentPoison = null!;
+    private static ConfigEntry<float> _minimumDamageTakenCapPercentFrost = null!;
+    private static ConfigEntry<float> _minimumDamageTakenCapPercentLightning = null!;
     private static ConfigEntry<float> _frostEnvImmunityTriggerFrostDeltaPercent = null!;
 
     internal static float GetConfiguredDelta(HitData.DamageModifier modifier)
@@ -182,14 +187,24 @@ public class AdditiveDamageModifierPlugin : BaseUnityPlugin
         };
     }
 
-    internal static float GetMinimumDamageTakenMultiplier()
+    internal static float GetMinimumDamageTakenMultiplier(HitData.DamageType damageType)
     {
-        return Mathf.Clamp(_minimumDamageTakenCapPercent.Value / 100f, 0f, 0.5f);
-    }
+        float capPercent = damageType switch
+        {
+            HitData.DamageType.Blunt => _minimumDamageTakenCapPercentBlunt.Value,
+            HitData.DamageType.Pierce => _minimumDamageTakenCapPercentPierce.Value,
+            HitData.DamageType.Slash => _minimumDamageTakenCapPercentSlash.Value,
+            HitData.DamageType.Fire => _minimumDamageTakenCapPercentFire.Value,
+            HitData.DamageType.Poison => _minimumDamageTakenCapPercentPoison.Value,
+            HitData.DamageType.Frost => _minimumDamageTakenCapPercentFrost.Value,
+            HitData.DamageType.Lightning => _minimumDamageTakenCapPercentLightning.Value,
+            HitData.DamageType.Spirit => 0f,
+            HitData.DamageType.Chop => 0f,
+            HitData.DamageType.Pickaxe => 0f,
+            _ => 0f
+        };
 
-    internal static float GetMinimumDeltaCap()
-    {
-        return GetMinimumDamageTakenMultiplier() - 1f;
+        return Mathf.Clamp(capPercent / 100f, 0f, 0.5f);
     }
 
     internal static float GetFrostEnvImmunityTriggerDelta()
@@ -223,6 +238,18 @@ public class AdditiveDamageModifierPlugin : BaseUnityPlugin
             new ConfigDescription(
                 description,
                 new AcceptableValueRange<float>(-100f, 100f),
+                new ConfigurationManagerAttributes { Order = order }));
+    }
+
+    private ConfigEntry<float> playerMinimumDamageCapConfig(string name, float value, int order)
+    {
+        return config(
+            "2 - Additive Damage",
+            name,
+            value,
+            new ConfigDescription(
+                "Lower bound for final damage taken on Player after additive sum for this damage type. 0 means can go down to 0%, 50 means cannot go below 50%.",
+                new AcceptableValueRange<float>(0f, 50f),
                 new ConfigurationManagerAttributes { Order = order }));
     }
 
