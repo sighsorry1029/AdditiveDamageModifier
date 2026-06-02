@@ -6,7 +6,6 @@
         <NuGetPackageRoot Condition="'$(NuGetPackageRoot)' == '' and '$(NUGET_PACKAGES)' != ''">$(NUGET_PACKAGES)\</NuGetPackageRoot>
         <NuGetPackageRoot Condition="'$(NuGetPackageRoot)' == '' and Exists('$(USERPROFILE)\.nuget\packages')">$(USERPROFILE)\.nuget\packages\</NuGetPackageRoot>
         <RuntimeIdentifiers Condition="'$(RuntimeIdentifiers)' == ''">win</RuntimeIdentifiers>
-        <YamlDotNetDllPath>$(NuGetPackageRoot)yamldotnet\16.3.0\lib\net47\YamlDotNet.dll</YamlDotNetDllPath>
     </PropertyGroup>
     <PropertyGroup>
         <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
@@ -14,11 +13,11 @@
         <ProjectGuid>{4358610B-F3F4-4843-B7AF-98B7BC60DCDE}</ProjectGuid>
         <OutputType>Library</OutputType>
         <AppDesignerFolder>Properties</AppDesignerFolder>
-        <RootNamespace>ServerSyncModTemplate</RootNamespace>
+        <RootNamespace>AdditiveDamageModifier</RootNamespace>
         <AssemblyName>AdditiveDamageModifier</AssemblyName>
         <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
         <FileAlignment>512</FileAlignment>
-        <LangVersion>preview</LangVersion>
+        <LangVersion>latest</LangVersion>
         <Nullable>enable</Nullable>
     </PropertyGroup>
     <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
@@ -72,9 +71,6 @@
         <Reference Include="0Harmony">
             <HintPath>$(BepInExPath)\core\0Harmony.dll</HintPath>
         </Reference>
-        <Reference Include="assembly_guiutils">
-            <HintPath>$(PublicizedAssembliesPath)\assembly_guiutils_publicized.dll</HintPath>
-        </Reference>
         <Reference Include="assembly_utils">
             <HintPath>$(PublicizedAssembliesPath)\assembly_utils_publicized.dll</HintPath>
         </Reference>
@@ -87,9 +83,6 @@
         <Reference Include="ServerSync">
             <HintPath>Libs\ServerSync.dll</HintPath>
         </Reference>
-        <Reference Include="YamlDotNet">
-            <HintPath>$(YamlDotNetDllPath)</HintPath>
-        </Reference>
         <Reference Include="System"/>
         <Reference Include="System.Core"/>
         <Reference Include="System.Data"/>
@@ -97,31 +90,22 @@
         <Reference Include="UnityEngine">
             <HintPath>$(CorlibPath)\UnityEngine.dll</HintPath>
         </Reference>
-        <Reference Include="UnityEngine.AssetBundleModule">
-            <HintPath>$(CorlibPath)\UnityEngine.AssetBundleModule.dll</HintPath>
-        </Reference>
         <Reference Include="UnityEngine.CoreModule">
             <HintPath>$(CorlibPath)\UnityEngine.CoreModule.dll</HintPath>
         </Reference>
-        <Reference Include="UnityEngine.IMGUIModule">
-            <HintPath>$(CorlibPath)\UnityEngine.IMGUIModule.dll</HintPath>
-        </Reference>
-        <Reference Include="UnityEngine.InputLegacyModule">
-            <HintPath>$(CorlibPath)\UnityEngine.InputLegacyModule.dll</HintPath>
+        <Reference Include="Unity.TextMeshPro">
+            <HintPath>$(CorlibPath)\Unity.TextMeshPro.dll</HintPath>
         </Reference>
         <Reference Include="UnityEngine.UI">
             <HintPath>$(CorlibPath)\UnityEngine.UI.dll</HintPath>
         </Reference>
-        <Reference Include="Unity.TextMeshPro">
-            <HintPath>$(GamePath)\valheim_Data\Managed\Unity.TextMeshPro.dll</HintPath>
-        </Reference>
     </ItemGroup>
     <ItemGroup>
+        <Compile Include="AdditiveDamageDefinitions.cs" />
+        <Compile Include="AdditiveDamageStatusEffects.cs" />
         <Compile Include="AdditiveDamagePatches.cs" />
-        <Compile Include="LocalizationManager.cs"/>
         <Compile Include="Plugin.cs"/>
         <Compile Include="Properties\AssemblyInfo.cs"/>
-        <Compile Include="VersionHandshake.cs"/>
     </ItemGroup>
     <ItemGroup>
         <Content Include=".gitignore"/>
@@ -146,7 +130,6 @@
           <PrivateAssets>all</PrivateAssets>
           <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
-        <PackageReference Include="YamlDotNet" Version="16.3.0" />
     </ItemGroup>
     <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets"/>
     <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
@@ -181,44 +164,17 @@
     </Target>
     <Target Name="CopyOutputDLL" AfterTargets="GetAssemblyVersion">
         <Error Text="DLL not found in target directory." Condition="!Exists('$(TargetDir)$(AssemblyName).dll')"/>
-        <Copy SourceFiles="$(TargetDir)$(AssemblyName).dll" DestinationFolder="$(CopyOutputDLLPath)" OverwriteReadOnlyFiles="true"/>
-        <Copy SourceFiles="$(TargetDir)$(AssemblyName).dll" DestinationFolder="$(CopyOutputDLLPath2)" OverwriteReadOnlyFiles="true" Condition="Exists('$(CopyOutputDLLPath2)')"/>
-        <Copy SourceFiles="$(TargetDir)$(AssemblyName).dll" DestinationFolder="$(CopyOutputDLLPath3)" OverwriteReadOnlyFiles="true" Condition="Exists('$(CopyOutputDLLPath3)')"/>
+        <Copy SourceFiles="$(TargetDir)$(AssemblyName).dll" DestinationFolder="$(CopyOutputDLLPath)" OverwriteReadOnlyFiles="true" Condition="'$(DeployToGame)' == 'true' And '$(CopyOutputDLLPath)' != ''"/>
+        <Copy SourceFiles="$(TargetDir)$(AssemblyName).dll" DestinationFolder="$(CopyOutputDLLPath2)" OverwriteReadOnlyFiles="true" Condition="'$(DeployToGame)' == 'true' And Exists('$(CopyOutputDLLPath2)')"/>
+        <Copy SourceFiles="$(TargetDir)$(AssemblyName).dll" DestinationFolder="$(CopyOutputDLLPath3)" OverwriteReadOnlyFiles="true" Condition="'$(DeployToGame)' == 'true' And Exists('$(CopyOutputDLLPath3)')"/>
     </Target>
     <Target Name="CopyReadMeToTSFolder" AfterTargets="CopyOutputDLL" Condition=" ('$(Configuration)|$(Platform)' == 'Release|AnyCPU') And ('$(OS)' == 'Windows_NT') ">
-        <Warning Text="README.md not found in project directory. A default README.md file will be created for the Thunderstore package" Condition="!Exists('README.md')"/>
-        <WriteLinesToFile File="README.md" Lines="Default Readme file from one of Azumatt's Templates. Replace this with actual content." Overwrite="false" Condition="!Exists('README.md')"/>
+        <Error Text="README.md not found in project directory." Condition="!Exists('README.md')"/>
+        <MakeDir Directories="$(PackageDir)"/>
         <Copy SourceFiles="README.md" DestinationFolder="$(PackageDir)" OverwriteReadOnlyFiles="true"/>
-        <Copy SourceFiles="README.md" DestinationFolder="$(ProjectDir)\Thunderstore" OverwriteReadOnlyFiles="true"/>
     </Target>
-    <UsingTask TaskName="WriteManifestFile" TaskFactory="CodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.v4.0.dll">
-        <ParameterGroup>
-            <ManifestFile ParameterType="System.String" Required="true"/>
-            <AssemblyName ParameterType="System.String" Required="true"/>
-        </ParameterGroup>
-        <Task>
-            <Code Type="Fragment" Language="cs">
-                <![CDATA[
-if (!System.IO.File.Exists(ManifestFile))
-{
-string content = @"{
-  ""name"": """ + AssemblyName + @""",
-  ""version_number"": ""1.0.0"",
-  ""website_url"": ""https://discord.gg/pdHgy6Bsng"",
-  ""description"": ""Your mod description goes here. Do not forget to replace the icon.png file with your own. Must be 256x256. Your Readme.md file will be copied from the one in your project folder."",
-  ""dependencies"": [
-    ""denikson-BepInExPack_Valheim-5.4.2105""
-]
-}";
-System.IO.File.WriteAllText(ManifestFile, content);
-}
-]]>
-
-            </Code>
-        </Task>
-    </UsingTask>
     <Target Name="UpdateManifestVersion" AfterTargets="CopyReadmeToTSFolder" Condition=" ('$(Configuration)|$(Platform)' == 'Release|AnyCPU') And ('$(OS)' == 'Windows_NT') ">
-        <WriteManifestFile ManifestFile="$(ProjectDir)Thunderstore\manifest.json" AssemblyName="$(AssemblyName)"/>
+        <Error Text="manifest.json not found in Thunderstore directory." Condition="!Exists('$(ProjectDir)Thunderstore\manifest.json')"/>
         <ItemGroup>
             <ManifestFile Include="$(ProjectDir)Thunderstore\manifest.json"/>
         </ItemGroup>
