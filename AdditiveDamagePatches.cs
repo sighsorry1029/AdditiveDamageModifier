@@ -353,7 +353,7 @@ internal static class FrostStatusImmunityContext
         }
 
         float frostDelta = AdditiveDamageMath.ModifierToDelta(modifier);
-        float threshold = GetEnvImmunityFrostThreshold();
+        float threshold = AdditiveDamageModifierPlugin.GetFrostEnvImmunityTriggerDelta();
         bool immuneByThreshold = frostDelta <= threshold;
 
         if (immuneByThreshold)
@@ -365,9 +365,6 @@ internal static class FrostStatusImmunityContext
 
         return modifier;
     }
-
-    private static float GetEnvImmunityFrostThreshold() =>
-        AdditiveDamageModifierPlugin.GetFrostEnvImmunityTriggerDelta();
 }
 
 [HarmonyPatch(typeof(Player), "UpdateEnvStatusEffects")]
@@ -378,15 +375,24 @@ internal static class PlayerEnvStatusImmunityPatch
 
     private static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
     {
+        int replacementCount = 0;
         foreach (CodeInstruction instruction in instructions)
         {
             if (instruction.Calls(GetModifierMethod))
             {
+                replacementCount++;
                 yield return new CodeInstruction(OpCodes.Call, GetModifierForEnvMethod);
                 continue;
             }
 
             yield return instruction;
+        }
+
+        if (replacementCount == 0)
+        {
+            AdditiveDamageModifierPlugin.AdditiveDamageModifierLogger.LogWarning(
+                "Player.UpdateEnvStatusEffects shape changed (no DamageModifiers.GetModifier calls found). " +
+                "Cold/Freezing immunity threshold patch was not applied.");
         }
     }
 

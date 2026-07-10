@@ -13,7 +13,7 @@ namespace AdditiveDamageModifier;
 public class AdditiveDamageModifierPlugin : BaseUnityPlugin
 {
     internal const string ModName = "AdditiveDamageModifier";
-    internal const string ModVersion = "1.0.8";
+    internal const string ModVersion = "1.0.10";
     internal const string Author = "sighsorry";
     private const string ModGUID = $"{Author}.{ModName}";
     private readonly Harmony _harmony = new(ModGUID);
@@ -64,13 +64,18 @@ public class AdditiveDamageModifierPlugin : BaseUnityPlugin
             "Show Modifier Percent in Tooltips Outside Compendium",
             Toggle.On,
             new ConfigDescription(
-                "If on, item and other non-compendium damage modifier tooltip lines include the configured modifier percent, like (-30%). The Active effects compendium always shows percent and MinNet.",
+                "If on, item and other non-compendium damage modifier tooltip lines include the configured modifier percent, like (-30%). The Active effects compendium always shows percent and MinTotal.",
                 null,
                 new ConfigurationManagerAttributes { Order = 900 }),
             synchronizedSetting: false);
 
-        foreach (DamageModifierDefinition definition in AdditiveDamageDefinitions.DamageModifierConfigs)
+        foreach (DamageModifierDefinition definition in AdditiveDamageDefinitions.DamageModifiers)
         {
+            if (!definition.HasConfig)
+            {
+                continue;
+            }
+
             ModifierPercentConfigs[definition.Modifier] = additivePercentConfig(
                 $"{definition.DisplayName} Percent",
                 definition.DefaultPercent,
@@ -79,11 +84,26 @@ public class AdditiveDamageModifierPlugin : BaseUnityPlugin
         }
 
         int capOrder = 190;
-        foreach (DamageTypeDefinition definition in AdditiveDamageDefinitions.PlayerMinimumCapDamageTypes)
+        foreach (DamageTypeDefinition definition in AdditiveDamageDefinitions.DamageTypes)
         {
-            PlayerMinimumDamageCapConfigs[definition.Type] = playerMinimumDamageCapConfig(
+            if (!definition.HasPlayerMinimumCap)
+            {
+                continue;
+            }
+
+            ConfigEntry<int> legacyConfig = Config.Bind(
+                "2 - Additive Damage",
                 $"Minimum Damage Taken Cap Percent on Player - {definition.DisplayName}",
                 10,
+                new ConfigDescription(
+                    "Legacy player minimum damage setting used for migration.",
+                    new AcceptableValueRange<int>(0, 50)));
+            int migratedDefaultValue = legacyConfig.Value;
+            Config.Remove(legacyConfig.Definition);
+
+            PlayerMinimumDamageCapConfigs[definition.Type] = playerMinimumDamageCapConfig(
+                $"Player Minimum Damage Taken Percent - {definition.DisplayName}",
+                migratedDefaultValue,
                 capOrder);
             capOrder -= 10;
         }
@@ -95,7 +115,7 @@ public class AdditiveDamageModifierPlugin : BaseUnityPlugin
             new ConfigDescription(
                 "Maximum fall damage before status effects. Vanilla is 100 damage at 20m. Example: 200 with multiplier 1.00 reaches 200 damage at 36m; 200 with multiplier 2.00 reaches 200 damage at 20m.",
                 new AcceptableValueRange<int>(100, 500),
-                intConfigAttributes(120)));
+                configAttributes(120)));
         _fallDamageMultiplier = config(
             "3 - Fall Damage",
             "Fall Damage Multiplier",
@@ -103,7 +123,7 @@ public class AdditiveDamageModifierPlugin : BaseUnityPlugin
             new ConfigDescription(
                 "Controls how fast fall damage grows. 1.00 is vanilla speed. 2.00 doubles growth speed: 100 damage at 12m, and 200 damage at 20m if Maximum Fall Damage is 200. Values are rounded to 2 decimal places.",
                 new AcceptableValueRange<float>(1f, 2f),
-                floatConfigAttributes(110)));
+                configAttributes(110)));
         RoundFallDamageMultiplierConfig();
         _fallDamageMultiplier.SettingChanged += (_, _) => RoundFallDamageMultiplierConfig();
         _frostEnvImmunityTriggerFrostDeltaPercent = config(
@@ -113,7 +133,7 @@ public class AdditiveDamageModifierPlugin : BaseUnityPlugin
             new ConfigDescription(
                 "Shared trigger threshold for Cold and Freezing immunity in Player.UpdateEnvStatusEffects. If effective additive frost delta is <= this value, both Cold and Freezing are blocked/cleared by vanilla flow. -15 means -15%.",
                 new AcceptableValueRange<int>(-100, 0),
-                intConfigAttributes(30)));
+                configAttributes(30)));
     }
 
     internal static float GetConfiguredDelta(HitData.DamageModifier modifier)
@@ -130,8 +150,7 @@ public class AdditiveDamageModifierPlugin : BaseUnityPlugin
 
     internal static float GetMinimumDamageTakenMultiplier(HitData.DamageType damageType)
     {
-        return AdditiveDamageDefinitions.UsesPlayerMinimumCap(damageType)
-               && PlayerMinimumDamageCapConfigs.TryGetValue(damageType, out ConfigEntry<int> configEntry)
+        return PlayerMinimumDamageCapConfigs.TryGetValue(damageType, out ConfigEntry<int> configEntry)
             ? Mathf.Clamp(configEntry.Value / 100f, 0f, 0.5f)
             : 0f;
     }
@@ -181,7 +200,7 @@ public class AdditiveDamageModifierPlugin : BaseUnityPlugin
             new ConfigDescription(
                 description,
                 new AcceptableValueRange<int>(-100, 100),
-                intConfigAttributes(order)));
+                configAttributes(order)));
     }
 
     private ConfigEntry<int> playerMinimumDamageCapConfig(string name, int value, int order)
@@ -191,20 +210,12 @@ public class AdditiveDamageModifierPlugin : BaseUnityPlugin
             name,
             value,
             new ConfigDescription(
-                "Lower bound for final damage taken on Player after additive sum for this damage type. Immune still respects this cap. 0 means can go down to 0%, 50 means cannot go below 50%.",
+                "Minimum final damage percent the player can take after additive modifiers for this damage type. 10 means damage cannot be reduced below 10% of the original damage, shown as MinTotal -90% in the Active effects compendium. Immune still respects this cap.",
                 new AcceptableValueRange<int>(0, 50),
-                intConfigAttributes(order)));
+                configAttributes(order)));
     }
 
-    private static ConfigurationManagerAttributes intConfigAttributes(int order)
-    {
-        return new ConfigurationManagerAttributes
-        {
-            Order = order
-        };
-    }
-
-    private static ConfigurationManagerAttributes floatConfigAttributes(int order)
+    private static ConfigurationManagerAttributes configAttributes(int order)
     {
         return new ConfigurationManagerAttributes
         {
@@ -226,11 +237,9 @@ public class AdditiveDamageModifierPlugin : BaseUnityPlugin
         return Mathf.Clamp(Mathf.Round(value * 100f) / 100f, 1f, 2f);
     }
 
-    private class ConfigurationManagerAttributes
+    private sealed class ConfigurationManagerAttributes
     {
-        public int? Order = null!;
-        public bool? Browsable = null!;
-        public string? Category = null!;
+        public int? Order;
     }
 
     #endregion

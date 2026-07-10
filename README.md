@@ -60,7 +60,7 @@ Creature resistances and weaknesses are additive too. A creature that is weak to
 
 ## Player Minimum Damage Caps
 
-Player damage has configurable minimum net damage caps for these damage types:
+Player damage has configurable minimum damage taken caps for these damage types:
 
 - Blunt
 - Pierce
@@ -70,7 +70,9 @@ Player damage has configurable minimum net damage caps for these damage types:
 - Frost
 - Lightning
 
-The default cap is `10%`, so an immune or heavily resistant player still takes at least `10%` damage from those capped types.
+The config option is named `Player Minimum Damage Taken Percent - <damage type>`.
+The default value is `10`, so an immune or heavily resistant player still takes at least `10%` of the original damage from those capped types.
+In the Active effects compendium, this same cap is shown on the additive modifier scale as `MinTotal -90%`.
 
 Spirit intentionally has no player minimum cap because vanilla players are already immune to Spirit damage.
 
@@ -129,10 +131,10 @@ This non-compendium percent suffix is controlled by a client-only config option:
 Show Modifier Percent in Tooltips Outside Compendium = On
 ```
 
-The Active effects compendium always shows fuller information, including `MinNet`:
+The Active effects compendium always shows fuller information, including `MinTotal`:
 
 ```text
-Damage modifier: Resistant VS Fire (-30% / MinNet 10%)
+Damage modifier: Resistant VS Fire (-30% / MinTotal -90%)
 ```
 
 ## Fall Damage
@@ -171,7 +173,7 @@ Default value is `-15%`. If the effective additive frost delta is less than or e
 `2 - Additive Damage`
 
 - Modifier tier values
-- Player minimum damage caps
+- Player minimum damage taken caps
 - Cold/freezing immunity threshold
 
 `3 - Fall Damage`

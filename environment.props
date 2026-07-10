@@ -7,6 +7,6 @@
         <CopyOutputDLLPath>$(ValheimGamePath)\BepInEx\plugins</CopyOutputDLLPath> <!-- Used only when building with /p:DeployToGame=true. Duplicate this line and append a number for extra deploy targets. -->
         <!--<CopyOutputDLLPath2>$(ValheimGamePath)\BepInEx\plugins</CopyOutputDLLPath2>-->
         <!--<CopyOutputDLLPath3>$(ValheimGamePath)\BepInEx\plugins</CopyOutputDLLPath3>-->
-        <AfterTargets>ILRepacker</AfterTargets> <!-- If you are using KeyManager, change this to KeyManager as suggested in step 5.2 in the instructions -->
+        <AfterTargets>ILRepacker</AfterTargets>
     </PropertyGroup>
 </Project>

@@ -1,5 +1,3 @@
-using System.Collections.Generic;
-
 namespace AdditiveDamageModifier;
 
 internal static class AdditiveDamageDefinitions
@@ -19,9 +17,6 @@ internal static class AdditiveDamageDefinitions
         new(HitData.DamageType.Spirit, "Spirit", "spirit", "$inventory_spirit", hasStatusEffect: true, hasPlayerMinimumCap: false)
     };
 
-    public static readonly DamageTypeDefinition[] StatusEffectDamageTypes = GetStatusEffectDamageTypes();
-    public static readonly DamageTypeDefinition[] PlayerMinimumCapDamageTypes = GetPlayerMinimumCapDamageTypes();
-
     public static readonly DamageModifierDefinition[] DamageModifiers =
     {
         new(HitData.DamageModifier.VeryWeak, "Very Weak", "very_weak", "$inventory_veryweak", 45, "Very Weak modifier value. 45 means +45% damage taken.", 800),
@@ -32,9 +27,6 @@ internal static class AdditiveDamageDefinitions
         new(HitData.DamageModifier.VeryResistant, "Very Resistant", "very_resistant", "$inventory_veryresistant", -45, "Very Resistant modifier value. -45 means -45% damage taken.", 200),
         new(HitData.DamageModifier.Immune, "Immune", "immune", "$inventory_immune")
     };
-
-    public static readonly DamageModifierDefinition[] DamageModifierConfigs = GetConfigurableDamageModifiers();
-    public static readonly DamageModifierDefinition[] StatusEffectDamageModifiers = DamageModifiers;
 
     public static bool TryGetDamageType(HitData.DamageType type, out DamageTypeDefinition definition)
     {
@@ -66,53 +58,6 @@ internal static class AdditiveDamageDefinitions
         return false;
     }
 
-    public static bool UsesPlayerMinimumCap(HitData.DamageType damageType)
-    {
-        return TryGetDamageType(damageType, out DamageTypeDefinition definition)
-               && definition.HasPlayerMinimumCap;
-    }
-
-    private static DamageTypeDefinition[] GetStatusEffectDamageTypes()
-    {
-        List<DamageTypeDefinition> result = new();
-        foreach (DamageTypeDefinition definition in DamageTypes)
-        {
-            if (definition.HasStatusEffect)
-            {
-                result.Add(definition);
-            }
-        }
-
-        return result.ToArray();
-    }
-
-    private static DamageTypeDefinition[] GetPlayerMinimumCapDamageTypes()
-    {
-        List<DamageTypeDefinition> result = new();
-        foreach (DamageTypeDefinition definition in DamageTypes)
-        {
-            if (definition.HasPlayerMinimumCap)
-            {
-                result.Add(definition);
-            }
-        }
-
-        return result.ToArray();
-    }
-
-    private static DamageModifierDefinition[] GetConfigurableDamageModifiers()
-    {
-        List<DamageModifierDefinition> result = new();
-        foreach (DamageModifierDefinition definition in DamageModifiers)
-        {
-            if (definition.HasConfig)
-            {
-                result.Add(definition);
-            }
-        }
-
-        return result.ToArray();
-    }
 }
 
 internal readonly struct DamageTypeDefinition
