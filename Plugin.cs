@@ -1,9 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Globalization;
 using BepInEx;
 using BepInEx.Configuration;
 using BepInEx.Logging;
 using HarmonyLib;
+using LocalizationManager;
 using ServerSync;
 using UnityEngine;
 
@@ -13,7 +15,7 @@ namespace AdditiveDamageModifier;
 public class AdditiveDamageModifierPlugin : BaseUnityPlugin
 {
     internal const string ModName = "AdditiveDamageModifier";
-    internal const string ModVersion = "1.0.10";
+    internal const string ModVersion = "1.1.1";
     internal const string Author = "sighsorry";
     private const string ModGUID = $"{Author}.{ModName}";
     private readonly Harmony _harmony = new(ModGUID);
@@ -30,6 +32,8 @@ public class AdditiveDamageModifierPlugin : BaseUnityPlugin
 
     public void Awake()
     {
+        Localizer.Load(this);
+
         bool saveOnSet = Config.SaveOnConfigSet;
         Config.SaveOnConfigSet = false;
         try
@@ -57,7 +61,11 @@ public class AdditiveDamageModifierPlugin : BaseUnityPlugin
         ModifierPercentConfigs.Clear();
         PlayerMinimumDamageCapConfigs.Clear();
 
-        _serverConfigLocked = config("1 - General", "Lock Configuration", Toggle.On, "If on, the configuration is locked and can be changed by server admins only.");
+        _serverConfigLocked = config(
+            "1 - General",
+            "Lock Configuration",
+            Toggle.On,
+            new ConfigDescription("If on, the configuration is locked and can be changed by server admins only."));
         _ = ConfigSync.AddLockingConfigEntry(_serverConfigLocked);
         _showModifierPercentInTooltipsOutsideCompendium = config(
             "1 - General",
@@ -76,11 +84,7 @@ public class AdditiveDamageModifierPlugin : BaseUnityPlugin
                 continue;
             }
 
-            ModifierPercentConfigs[definition.Modifier] = additivePercentConfig(
-                $"{definition.DisplayName} Percent",
-                definition.DefaultPercent,
-                definition.Description,
-                definition.Order);
+            ModifierPercentConfigs[definition.Modifier] = additivePercentConfig(definition);
         }
 
         int capOrder = 190;
@@ -186,21 +190,18 @@ public class AdditiveDamageModifierPlugin : BaseUnityPlugin
         return configEntry;
     }
 
-    private ConfigEntry<T> config<T>(string group, string name, T value, string description, bool synchronizedSetting = true)
+    private ConfigEntry<int> additivePercentConfig(DamageModifierDefinition definition)
     {
-        return config(group, name, value, new ConfigDescription(description), synchronizedSetting);
-    }
-
-    private ConfigEntry<int> additivePercentConfig(string name, int value, string description, int order)
-    {
+        string defaultPercent = definition.DefaultPercent.ToString(CultureInfo.InvariantCulture);
+        string signedDefaultPercent = definition.DefaultPercent.ToString("+0;-0;0", CultureInfo.InvariantCulture);
         return config(
             "2 - Additive Damage",
-            name,
-            value,
+            $"{definition.DisplayName} Percent",
+            definition.DefaultPercent,
             new ConfigDescription(
-                description,
+                $"{definition.DisplayName} modifier value. {defaultPercent} means {signedDefaultPercent}% damage taken.",
                 new AcceptableValueRange<int>(-100, 100),
-                configAttributes(order)));
+                configAttributes(definition.Order)));
     }
 
     private ConfigEntry<int> playerMinimumDamageCapConfig(string name, int value, int order)

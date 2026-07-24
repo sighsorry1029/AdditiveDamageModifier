@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using HarmonyLib;
 using TMPro;
 using UnityEngine;
@@ -54,14 +55,16 @@ internal static class AdditiveDamageStatusEffectCatalog
         DamageTypeDefinition damageType,
         DamageModifierDefinition damageModifier)
     {
+        string damageTypeDisplayName = FormatStatusDisplayName(damageType.StatusName);
+        string modifierDisplayName = FormatStatusDisplayName(damageModifier.StatusName);
         SE_AdditiveDamageModifier statusEffect = ScriptableObject.CreateInstance<SE_AdditiveDamageModifier>();
         statusEffect.name = statusEffectName;
-        statusEffect.m_name = GetDisplayName(damageType.StatusName, damageModifier.StatusName);
+        statusEffect.m_name = $"{damageTypeDisplayName} {modifierDisplayName}";
         statusEffect.m_tooltip = $"Applies {damageModifier.DisplayName} to {damageType.DisplayName} damage.";
         statusEffect.m_icon = GetIcon(damageType, damageModifier);
         statusEffect.m_modifier = damageModifier.Modifier;
-        statusEffect.m_damageTypeName = FormatStatusDisplayName(damageType.StatusName);
-        statusEffect.m_modifierName = FormatStatusDisplayName(damageModifier.StatusName);
+        statusEffect.m_damageTypeName = damageTypeDisplayName;
+        statusEffect.m_modifierName = modifierDisplayName;
         statusEffect.m_mods = new List<HitData.DamageModPair>
         {
             new()
@@ -261,9 +264,6 @@ internal static class AdditiveDamageStatusEffectCatalog
     private static string GetStatusEffectName(string damageTypeName, string damageModifierName) =>
         $"{NamePrefix}{damageTypeName}_{damageModifierName}";
 
-    private static string GetDisplayName(string damageTypeName, string damageModifierName) =>
-        $"{FormatStatusDisplayName(damageTypeName)} {FormatStatusDisplayName(damageModifierName)}";
-
     private static string FormatStatusDisplayName(string statusName) =>
         statusName.Replace('_', ' ');
 }
@@ -294,7 +294,7 @@ internal static class HudUpdateStatusEffectsPatch
         int count = Mathf.Min(statusEffects.Count, __instance.m_statusEffects.Count);
         for (int i = 0; i < count; i++)
         {
-            TMP_Text nameText = GetNameText(__instance.m_statusEffects[i]);
+            TMP_Text? nameText = GetNameText(__instance.m_statusEffects[i]);
             if (nameText == null)
             {
                 continue;
@@ -320,7 +320,7 @@ internal static class HudUpdateStatusEffectsPatch
         }
     }
 
-    private static TMP_Text GetNameText(RectTransform statusEffectRoot)
+    private static TMP_Text? GetNameText(RectTransform statusEffectRoot)
     {
         foreach (TMP_Text text in statusEffectRoot.GetComponentsInChildren<TMP_Text>(true))
         {
@@ -330,7 +330,7 @@ internal static class HudUpdateStatusEffectsPatch
             }
         }
 
-        return null!;
+        return null;
     }
 }
 
@@ -373,34 +373,10 @@ internal static class AdditiveDamageDisplay
         return $" ({modifierPercent} / MinTotal {FormatMinimumTotalPercent(damageType)})";
     }
 
-    public static string GetModifierLocalizationKey(HitData.DamageModifier modifier)
-    {
-        return AdditiveDamageDefinitions.TryGetDamageModifier(modifier, out DamageModifierDefinition definition)
-            ? definition.LocalizationKey
-            : "";
-    }
-
-    public static string GetDamageTypeLocalizationKey(HitData.DamageType damageType)
-    {
-        return AdditiveDamageDefinitions.TryGetDamageType(damageType, out DamageTypeDefinition definition)
-            ? definition.LocalizationKey
-            : "";
-    }
-
-    public static bool ShouldShowDamageModifier(HitData.DamageModifier modifier)
-    {
-        if (modifier == HitData.DamageModifier.Ignore || modifier == HitData.DamageModifier.Normal)
-        {
-            return false;
-        }
-
-        return !string.IsNullOrEmpty(GetModifierLocalizationKey(modifier));
-    }
-
-    private static string FormatPercent(float value)
+    internal static string FormatPercent(float value)
     {
         int roundedValue = Mathf.RoundToInt(value);
-        return $"{roundedValue.ToString("+0;-0;0")}%";
+        return $"{roundedValue.ToString("+0;-0;0", CultureInfo.InvariantCulture)}%";
     }
 }
 
@@ -409,23 +385,15 @@ internal static class SEStatsDamageModifiersTooltipPatch
 {
     private static bool Prefix(List<HitData.DamageModPair> mods, ref string __result)
     {
-        foreach (HitData.DamageModPair mod in mods)
+        if (!AdditiveDamageTooltipBuilder.TryBuildDamageModifiersTooltipString(
+                mods,
+                AdditiveDamageTooltipContext.IncludeMinimumTotal,
+                out string tooltip))
         {
-            if (mod.m_modifier == HitData.DamageModifier.Ignore || mod.m_modifier == HitData.DamageModifier.Normal)
-            {
-                continue;
-            }
-
-            if (!AdditiveDamageDefinitions.TryGetDamageModifier(mod.m_modifier, out _)
-                || !AdditiveDamageDefinitions.TryGetDamageType(mod.m_type, out _))
-            {
-                return true;
-            }
+            return true;
         }
 
-        __result = AdditiveDamageTooltipBuilder.GetDamageModifiersTooltipString(
-            mods,
-            AdditiveDamageTooltipContext.IncludeMinimumTotal);
+        __result = tooltip;
         return false;
     }
 }
@@ -467,35 +435,50 @@ internal static class AdditiveDamageTooltipContext
 
 internal static class AdditiveDamageTooltipBuilder
 {
-    public static string GetDamageModifiersTooltipString(List<HitData.DamageModPair> mods, bool includeMinimumTotal)
+    public static bool TryBuildDamageModifiersTooltipString(
+        List<HitData.DamageModPair> mods,
+        bool includeMinimumTotal,
+        out string tooltip)
     {
         if (mods.Count == 0)
         {
-            return "";
+            tooltip = "";
+            return true;
         }
 
         string text = "";
         foreach (HitData.DamageModPair mod in mods)
         {
-            if (!AdditiveDamageDisplay.ShouldShowDamageModifier(mod.m_modifier))
+            if (mod.m_modifier == HitData.DamageModifier.Ignore || mod.m_modifier == HitData.DamageModifier.Normal)
             {
                 continue;
             }
 
-            string modifierKey = AdditiveDamageDisplay.GetModifierLocalizationKey(mod.m_modifier);
-            string damageTypeKey = AdditiveDamageDisplay.GetDamageTypeLocalizationKey(mod.m_type);
-            if (string.IsNullOrEmpty(modifierKey) || string.IsNullOrEmpty(damageTypeKey))
+            if (!AdditiveDamageDefinitions.TryGetDamageModifier(
+                    mod.m_modifier,
+                    out DamageModifierDefinition modifierDefinition)
+                || !AdditiveDamageDefinitions.TryGetDamageType(
+                    mod.m_type,
+                    out DamageTypeDefinition damageTypeDefinition))
+            {
+                tooltip = "";
+                return false;
+            }
+
+            if (string.IsNullOrEmpty(modifierDefinition.LocalizationKey)
+                || string.IsNullOrEmpty(damageTypeDefinition.LocalizationKey))
             {
                 continue;
             }
 
             text += "\n$inventory_dmgmod: ";
-            text += $"<color=orange>{modifierKey}</color> VS ";
-            text += $"<color=orange>{damageTypeKey}</color>";
+            text += $"<color=orange>{modifierDefinition.LocalizationKey}</color> VS ";
+            text += $"<color=orange>{damageTypeDefinition.LocalizationKey}</color>";
             text += AdditiveDamageDisplay.GetModifierTooltipSuffix(mod.m_type, mod.m_modifier, includeMinimumTotal);
         }
 
-        return text;
+        tooltip = text;
+        return true;
     }
 }
 

@@ -22,6 +22,7 @@ Above is an example of RootArmor(+30%) + FeatherCape(+45%) + FireResistMead(-30%
 - Adds player minimum damage caps so very strong resistance cannot always reduce player damage to 0.
 - Adds visible `adm_` status effects for testing, events, commands, and other mods.
 - Shows the effective modifier percent in tooltips and active effect UI.
+- Adds a Compendium page that explains the current server values, calculation, player minimums, and vanilla differences.
 - Adds configurable fall damage cap and fall damage multiplier options.
 - Keeps ServerSync version enforcement and synced gameplay config.
 
@@ -137,6 +138,32 @@ The Active effects compendium always shows fuller information, including `MinTot
 Damage modifier: Resistant VS Fire (-30% / MinTotal -90%)
 ```
 
+The Compendium also includes an `Additive Damage Modifiers` page. It reads the current server configuration and explains:
+
+- Current additive modifier values
+- The damage formula and a calculated example
+- Player minimum damage and `MinTotal`
+- Vanilla modifier values and selection behavior
+- Spirit, Immune, Ignore, and Cold/Freezing rules
+
+## Localization
+
+The Compendium page includes English and Korean translations in the mod DLL. The Thunderstore package also includes `AdditiveDamageModifier.English.yml` as an editable translation template.
+
+Additional client-side translations can be placed anywhere under the `BepInEx` folder. Name the file after the language selected in Valheim:
+
+```text
+AdditiveDamageModifier.<Language>.yml
+```
+
+Example:
+
+```text
+AdditiveDamageModifier.Turkish.yml
+```
+
+Use the [English translation file](https://github.com/sighsorry1029/AdditiveDamageModifier/blob/main/Resources/Translations/English.yml) as the template. Missing or blank keys fall back to English, and unknown keys are ignored. A malformed external file is skipped and reported in the BepInEx log.
+
 ## Fall Damage
 
 Fall damage has two synced config options:
@@ -180,6 +207,16 @@ Default value is `-15%`. If the effective additive frost delta is less than or e
 
 - Maximum fall damage
 - Fall damage multiplier
+
+## Building Packages
+
+Set `ModVersion` in `Plugin.cs`, then run a Release build:
+
+```powershell
+dotnet build AdditiveDamageModifier.csproj -c Release
+```
+
+After ILRepack completes, the Release build updates `Thunderstore/manifest.json` to the DLL version and creates both `Thunderstore/AdditiveDamageModifier_v<version>.zip` and `Nexus/AdditiveDamageModifier_v<version>.zip`. Rebuilding the same version replaces those archives. Debug builds do not update the manifest or create packages. Release packaging currently requires Windows PowerShell. Update the changelog manually when changing versions.
 
 ## Github
 

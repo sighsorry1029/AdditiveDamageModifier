@@ -11,8 +11,9 @@ internal static class AdditiveDamageMath
 {
     private const int CustomModifierBase = 1000000000;
     private const int CustomModifierScale = 1000;
-    private const float CombineClampAbs = 100000f;
-    private const int CustomModifierMax = 1200000000;
+    private const int CombineClampAbs = 100000;
+    private const int CustomModifierZero = CustomModifierBase + CombineClampAbs * CustomModifierScale;
+    private const int CustomModifierMax = CustomModifierBase + 2 * CombineClampAbs * CustomModifierScale;
 
     public static HitData.DamageModifier Combine(HitData.DamageModifier current, HitData.DamageModifier incoming)
     {
@@ -59,7 +60,7 @@ internal static class AdditiveDamageMath
             return false;
         }
 
-        delta = (raw - CustomModifierBase) / (float)CustomModifierScale - CombineClampAbs;
+        delta = (raw - CustomModifierZero) / (float)CustomModifierScale;
         return true;
     }
 
@@ -68,7 +69,7 @@ internal static class AdditiveDamageMath
     private static HitData.DamageModifier EncodeCustomDelta(float delta)
     {
         float clamped = Mathf.Clamp(delta, -CombineClampAbs, CombineClampAbs);
-        int encoded = CustomModifierBase + Mathf.RoundToInt((clamped + CombineClampAbs) * CustomModifierScale);
+        int encoded = CustomModifierZero + Mathf.RoundToInt(clamped * CustomModifierScale);
         return (HitData.DamageModifier)encoded;
     }
 
@@ -212,7 +213,9 @@ internal static class CharacterUpdateGroundContactFallDamagePatch
             if (!replaced && instruction.Calls(Clamp01Method))
             {
                 replaced = true;
-                yield return new CodeInstruction(OpCodes.Call, ScaleFallDamageProgressMethod);
+                instruction.opcode = OpCodes.Call;
+                instruction.operand = ScaleFallDamageProgressMethod;
+                yield return instruction;
                 continue;
             }
 
@@ -294,28 +297,22 @@ internal static class HitDataApplyResistancePatch
         float weakDmg,
         float immuneDmg)
     {
-        HitData.DamageModifier result = HitData.DamageModifier.Immune;
-        if (immuneDmg >= resistantDmg && immuneDmg >= weakDmg && immuneDmg >= normalDmg)
+        if (weakDmg >= resistantDmg && weakDmg >= immuneDmg && weakDmg >= normalDmg)
         {
-            result = HitData.DamageModifier.Immune;
-        }
-
-        if (normalDmg >= resistantDmg && normalDmg >= weakDmg && normalDmg >= immuneDmg)
-        {
-            result = HitData.DamageModifier.Normal;
+            return HitData.DamageModifier.Weak;
         }
 
         if (resistantDmg >= weakDmg && resistantDmg >= immuneDmg && resistantDmg >= normalDmg)
         {
-            result = HitData.DamageModifier.Resistant;
+            return HitData.DamageModifier.Resistant;
         }
 
-        if (weakDmg >= resistantDmg && weakDmg >= immuneDmg && weakDmg >= normalDmg)
+        if (normalDmg >= resistantDmg && normalDmg >= weakDmg && normalDmg >= immuneDmg)
         {
-            result = HitData.DamageModifier.Weak;
+            return HitData.DamageModifier.Normal;
         }
 
-        return result;
+        return HitData.DamageModifier.Immune;
     }
 }
 
@@ -342,9 +339,13 @@ internal static class HitDataApplyModifierPatch
     }
 }
 
-internal static class FrostStatusImmunityContext
+[HarmonyPatch(typeof(Player), "UpdateEnvStatusEffects")]
+internal static class PlayerEnvStatusImmunityPatch
 {
-    public static HitData.DamageModifier GetModifierForEnv(ref HitData.DamageModifiers modifiers, HitData.DamageType damageType)
+    private static readonly MethodInfo GetModifierMethod = AccessTools.Method(typeof(HitData.DamageModifiers), nameof(HitData.DamageModifiers.GetModifier));
+    private static readonly MethodInfo GetModifierForEnvMethod = AccessTools.Method(typeof(PlayerEnvStatusImmunityPatch), nameof(GetModifierForEnv));
+
+    private static HitData.DamageModifier GetModifierForEnv(ref HitData.DamageModifiers modifiers, HitData.DamageType damageType)
     {
         HitData.DamageModifier modifier = modifiers.GetModifier(damageType);
         if (damageType != HitData.DamageType.Frost)
@@ -365,13 +366,6 @@ internal static class FrostStatusImmunityContext
 
         return modifier;
     }
-}
-
-[HarmonyPatch(typeof(Player), "UpdateEnvStatusEffects")]
-internal static class PlayerEnvStatusImmunityPatch
-{
-    private static readonly MethodInfo GetModifierMethod = AccessTools.Method(typeof(HitData.DamageModifiers), nameof(HitData.DamageModifiers.GetModifier));
-    private static readonly MethodInfo GetModifierForEnvMethod = AccessTools.Method(typeof(FrostStatusImmunityContext), nameof(FrostStatusImmunityContext.GetModifierForEnv));
 
     private static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
     {
@@ -381,7 +375,9 @@ internal static class PlayerEnvStatusImmunityPatch
             if (instruction.Calls(GetModifierMethod))
             {
                 replacementCount++;
-                yield return new CodeInstruction(OpCodes.Call, GetModifierForEnvMethod);
+                instruction.opcode = OpCodes.Call;
+                instruction.operand = GetModifierForEnvMethod;
+                yield return instruction;
                 continue;
             }
 

@@ -1,0 +1,24 @@
+adm_compendium_title: "Additive Damage Modifiers"
+adm_compendium_intro: "Resistance and weakness values add together for each damage type. This page uses the server's current configuration."
+
+adm_compendium_current_heading: "Current Modifier Values"
+adm_compendium_current_intro: "Positive values increase damage taken. Negative values reduce damage taken."
+
+adm_compendium_calculation_heading: "How Damage Is Calculated"
+adm_compendium_sum_rule: "All modifiers for one damage type are added first. A player minimum, when configured, is applied after that sum."
+adm_compendium_formula: "Damage taken = original damage x (100% + total modifier)"
+adm_compendium_example: "Example: {0} = {1}, so {2} of the original damage is taken before any player minimum."
+
+adm_compendium_minimum_heading: "Player Minimum Damage"
+adm_compendium_minimum_intro: "These limits apply only when the target is a player. MinTotal is the lowest total modifier allowed: a 10% damage minimum is MinTotal -90%."
+adm_compendium_minimum_line: "{0}: at least {1} of original damage (MinTotal {2})"
+adm_compendium_spirit_rule: "Spirit has no player minimum because vanilla players are already immune to Spirit damage."
+
+adm_compendium_vanilla_heading: "Vanilla Comparison"
+adm_compendium_vanilla_rule: "Vanilla Valheim selects one final category using override priority; resistance and weakness values are not added."
+adm_compendium_additive_rule: "This mod adds every value instead, so resistance and weakness can cancel each other and application order does not change the result."
+
+adm_compendium_special_heading: "Special Rules"
+adm_compendium_immune_rule: "Immune contributes {0}, so weakness can offset it. Player minimums still apply to capped damage types."
+adm_compendium_ignore_rule: "Ignore is different from Immune: it always makes that damage type deal 0 and does not participate in the additive sum."
+adm_compendium_frost_rule: "Cold and Freezing immunity triggers when the combined Frost modifier is {0} or lower."

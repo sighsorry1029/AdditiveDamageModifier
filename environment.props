@@ -1,12 +1,8 @@
 <Project>
     <PropertyGroup>
-        <ValheimGamePath>C:\Program Files (x86)\Steam\steamapps\common\Valheim</ValheimGamePath>
-        <BepInExPath>$(ValheimGamePath)\BepInEx</BepInExPath>
-        <CorlibPath>$(ValheimGamePath)\valheim_Data\Managed</CorlibPath>
-        <PublicizedAssembliesPath>$(ValheimGamePath)\valheim_Data\Managed\publicized_assemblies</PublicizedAssembliesPath>
-        <CopyOutputDLLPath>$(ValheimGamePath)\BepInEx\plugins</CopyOutputDLLPath> <!-- Used only when building with /p:DeployToGame=true. Duplicate this line and append a number for extra deploy targets. -->
-        <!--<CopyOutputDLLPath2>$(ValheimGamePath)\BepInEx\plugins</CopyOutputDLLPath2>-->
-        <!--<CopyOutputDLLPath3>$(ValheimGamePath)\BepInEx\plugins</CopyOutputDLLPath3>-->
-        <AfterTargets>ILRepacker</AfterTargets>
+        <!-- Override with /p:GamePath=... when Valheim is installed elsewhere. -->
+        <GamePath Condition="'$(GamePath)' == '' AND Exists('C:\Program Files (x86)\Steam\steamapps\common\Valheim')">C:\Program Files (x86)\Steam\steamapps\common\Valheim</GamePath>
+        <!--<CopyOutputDLLPath2>$(GamePath)\BepInEx\plugins</CopyOutputDLLPath2>-->
+        <!--<CopyOutputDLLPath3>$(GamePath)\BepInEx\plugins</CopyOutputDLLPath3>-->
     </PropertyGroup>
 </Project>

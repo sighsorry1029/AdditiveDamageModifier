@@ -19,12 +19,12 @@ internal static class AdditiveDamageDefinitions
 
     public static readonly DamageModifierDefinition[] DamageModifiers =
     {
-        new(HitData.DamageModifier.VeryWeak, "Very Weak", "very_weak", "$inventory_veryweak", 45, "Very Weak modifier value. 45 means +45% damage taken.", 800),
-        new(HitData.DamageModifier.Weak, "Weak", "weak", "$inventory_weak", 30, "Weak modifier value. 30 means +30% damage taken.", 700),
-        new(HitData.DamageModifier.SlightlyWeak, "Slightly Weak", "slightly_weak", "$inventory_slightlyweak", 15, "Slightly Weak modifier value. 15 means +15% damage taken.", 600),
-        new(HitData.DamageModifier.SlightlyResistant, "Slightly Resistant", "slightly_resistant", "$inventory_slightlyresistant", -15, "Slightly Resistant modifier value. -15 means -15% damage taken.", 400),
-        new(HitData.DamageModifier.Resistant, "Resistant", "resistant", "$inventory_resistant", -30, "Resistant modifier value. -30 means -30% damage taken.", 300),
-        new(HitData.DamageModifier.VeryResistant, "Very Resistant", "very_resistant", "$inventory_veryresistant", -45, "Very Resistant modifier value. -45 means -45% damage taken.", 200),
+        new(HitData.DamageModifier.VeryWeak, "Very Weak", "very_weak", "$inventory_veryweak", 45, 800),
+        new(HitData.DamageModifier.Weak, "Weak", "weak", "$inventory_weak", 30, 700),
+        new(HitData.DamageModifier.SlightlyWeak, "Slightly Weak", "slightly_weak", "$inventory_slightlyweak", 15, 600),
+        new(HitData.DamageModifier.SlightlyResistant, "Slightly Resistant", "slightly_resistant", "$inventory_slightlyresistant", -15, 400),
+        new(HitData.DamageModifier.Resistant, "Resistant", "resistant", "$inventory_resistant", -30, 300),
+        new(HitData.DamageModifier.VeryResistant, "Very Resistant", "very_resistant", "$inventory_veryresistant", -45, 200),
         new(HitData.DamageModifier.Immune, "Immune", "immune", "$inventory_immune")
     };
 
@@ -94,7 +94,6 @@ internal readonly struct DamageModifierDefinition
         string statusName,
         string localizationKey,
         int defaultPercent,
-        string description,
         int order)
     {
         Modifier = modifier;
@@ -102,7 +101,6 @@ internal readonly struct DamageModifierDefinition
         StatusName = statusName;
         LocalizationKey = localizationKey;
         DefaultPercent = defaultPercent;
-        Description = description;
         Order = order;
         HasConfig = true;
     }
@@ -118,7 +116,6 @@ internal readonly struct DamageModifierDefinition
         StatusName = statusName;
         LocalizationKey = localizationKey;
         DefaultPercent = 0;
-        Description = "";
         Order = 0;
         HasConfig = false;
     }
@@ -128,7 +125,6 @@ internal readonly struct DamageModifierDefinition
     public string StatusName { get; }
     public string LocalizationKey { get; }
     public int DefaultPercent { get; }
-    public string Description { get; }
     public int Order { get; }
     public bool HasConfig { get; }
 }
