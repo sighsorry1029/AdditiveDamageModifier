@@ -231,7 +231,7 @@ internal static class CharacterUpdateGroundContactFallDamagePatch
     }
 }
 
-[HarmonyPatch(typeof(HitData.DamageModifiers), nameof(HitData.DamageModifiers.ApplyIfBetter))]
+[HarmonyPatch(typeof(HitData.DamageModifiers), "ApplyIfBetter")]
 internal static class DamageModifiersApplyIfBetterPatch
 {
     private static bool Prefix(ref HitData.DamageModifier original, HitData.DamageModifier mod)

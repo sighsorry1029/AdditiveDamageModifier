@@ -41,8 +41,6 @@ internal static class AdditiveDamageStatusEffectCatalog
             }
         }
 
-        RefreshAddStatusTabOptions();
-
         if (addedCount > 0)
         {
             AdditiveDamageModifierPlugin.AdditiveDamageModifierLogger.LogDebug(
@@ -252,15 +250,6 @@ internal static class AdditiveDamageStatusEffectCatalog
         };
     }
 
-    private static void RefreshAddStatusTabOptions()
-    {
-        if (Terminal.commands.TryGetValue("addstatus", out Terminal.ConsoleCommand command))
-        {
-            command.m_tabOptions = null;
-            command.m_alwaysRefreshTabOptions = true;
-        }
-    }
-
     private static string GetStatusEffectName(string damageTypeName, string damageModifierName) =>
         $"{NamePrefix}{damageTypeName}_{damageModifierName}";
 
@@ -279,22 +268,22 @@ internal sealed class SE_AdditiveDamageModifier : SE_Stats
     public string GetHudName() => $"{m_damageTypeName}\n{m_modifierName}";
 }
 
-[HarmonyPatch(typeof(Hud), nameof(Hud.UpdateStatusEffects))]
+[HarmonyPatch(typeof(Hud), "UpdateStatusEffects")]
 internal static class HudUpdateStatusEffectsPatch
 {
     private const float HudNameVerticalOffset = 12f;
 
-    private static void Postfix(Hud __instance, List<StatusEffect> statusEffects)
+    private static void Postfix(List<StatusEffect> statusEffects, List<RectTransform> ___m_statusEffects)
     {
-        if (__instance?.m_statusEffects == null || statusEffects == null)
+        if (statusEffects == null || ___m_statusEffects == null)
         {
             return;
         }
 
-        int count = Mathf.Min(statusEffects.Count, __instance.m_statusEffects.Count);
+        int count = Mathf.Min(statusEffects.Count, ___m_statusEffects.Count);
         for (int i = 0; i < count; i++)
         {
-            TMP_Text? nameText = GetNameText(__instance.m_statusEffects[i]);
+            TMP_Text? nameText = GetNameText(___m_statusEffects[i]);
             if (nameText == null)
             {
                 continue;
@@ -482,7 +471,7 @@ internal static class AdditiveDamageTooltipBuilder
     }
 }
 
-[HarmonyPatch(typeof(ObjectDB), nameof(ObjectDB.Awake))]
+[HarmonyPatch(typeof(ObjectDB), "Awake")]
 internal static class ObjectDbAwakeStatusEffectPatch
 {
     private static void Postfix(ObjectDB __instance)

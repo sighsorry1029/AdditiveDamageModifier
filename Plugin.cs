@@ -15,7 +15,7 @@ namespace AdditiveDamageModifier;
 public class AdditiveDamageModifierPlugin : BaseUnityPlugin
 {
     internal const string ModName = "AdditiveDamageModifier";
-    internal const string ModVersion = "1.1.1";
+    internal const string ModVersion = "1.1.3";
     internal const string Author = "sighsorry";
     private const string ModGUID = $"{Author}.{ModName}";
     private readonly Harmony _harmony = new(ModGUID);

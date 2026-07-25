@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
 using HarmonyLib;
@@ -10,15 +11,15 @@ internal static class AdditiveDamageCompendium
 {
     private const string PageTopic = "$adm_compendium_title";
 
-    internal static void AddPage(TextsDialog dialog)
+    internal static void AddPage(List<TextsDialog.TextInfo>? texts)
     {
-        if (dialog?.m_texts == null)
+        if (texts == null)
         {
             return;
         }
 
-        dialog.m_texts.RemoveAll(text => string.Equals(text?.m_topic, PageTopic, StringComparison.Ordinal));
-        dialog.m_texts.Add(new TextsDialog.TextInfo(PageTopic, BuildPageText()));
+        texts.RemoveAll(text => string.Equals(text?.m_topic, PageTopic, StringComparison.Ordinal));
+        texts.Add(new TextsDialog.TextInfo(PageTopic, BuildPageText()));
     }
 
     private static string BuildPageText()
@@ -216,8 +217,8 @@ internal static class AdditiveDamageCompendium
 [HarmonyPatch(typeof(TextsDialog), "UpdateTextsList")]
 internal static class TextsDialogUpdateTextsListAdditiveDamagePatch
 {
-    private static void Postfix(TextsDialog __instance)
+    private static void Postfix(List<TextsDialog.TextInfo> ___m_texts)
     {
-        AdditiveDamageCompendium.AddPage(__instance);
+        AdditiveDamageCompendium.AddPage(___m_texts);
     }
 }

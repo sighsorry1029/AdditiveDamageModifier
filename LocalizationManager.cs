@@ -14,6 +14,10 @@ namespace LocalizationManager;
 internal static class Localizer
 {
     private static readonly string[] FileExtensions = { ".json", ".yml" };
+    private static readonly MethodInfo? AddWordMethod = AccessTools.DeclaredMethod(
+        typeof(Localization),
+        "AddWord",
+        new[] { typeof(string), typeof(string) });
     private static BaseUnityPlugin? _plugin;
     private static BepInEx.Logging.ManualLogSource Logger =>
         AdditiveDamageModifier.AdditiveDamageModifierPlugin.AdditiveDamageModifierLogger;
@@ -51,9 +55,14 @@ internal static class Localizer
             }
         }
 
+        if (AddWordMethod == null)
+        {
+            throw new MissingMethodException(typeof(Localization).FullName, "AddWord");
+        }
+
         foreach (KeyValuePair<string, string> entry in texts)
         {
-            localization.AddWord(entry.Key, entry.Value);
+            AddWordMethod.Invoke(localization, new object[] { entry.Key, entry.Value });
         }
     }
 
