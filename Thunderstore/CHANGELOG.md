@@ -1,5 +1,7 @@
 | `Version` | `Update Notes`    |
 |-----------|-------------------|
+| 1.2.1     | - Localized the `Net`, `MinTotal`, and `Ignore` tooltip labels with embedded English and Korean translations <br> - Updated the Korean Compendium text to use the localized minimum-total terminology <br> - Made the new tooltip labels available to external translation overrides |
+| 1.2.0     | - Added `Net` to damage modifier tooltip lines for equipped passive armor and currently active status effects, using the same combined player modifiers as damage calculation <br> - Kept direct weapon and shield block modifiers out of passive Net while including their active Equip or Set status effects <br> - Reused one Net snapshot per tooltip or Active effects page to avoid repeated aggregation |
 | 1.1.3     | - Fixed Valheim private-field access errors during ObjectDB startup, HUD updates, and Compendium updates by removing optional terminal cache manipulation and using Harmony field injection for required UI lists |
 | 1.1.2     | - Fixed a startup `MethodAccessException` by registering localization through Valheim's non-public `Localization.AddWord` method at runtime |
 | 1.1.1     | - Fixed stacked modifier encoding precision so configured percent steps remain order-independent and exact Frost immunity thresholds are respected <br> - Limited external translation overrides to known mod keys and treated blank values as English fallbacks <br> - Automated Release packaging so the DLL version, manifest, and Thunderstore/Nexus archives stay synchronized |

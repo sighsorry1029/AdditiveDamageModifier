@@ -1,6 +1,10 @@
 adm_compendium_title: "가산 피해 보정"
 adm_compendium_intro: "피해 유형별 저항과 약점 수치를 모두 더해서 적용합니다. 이 페이지에는 현재 서버 설정값이 표시됩니다."
 
+adm_tooltip_net_label: "현재 총합"
+adm_tooltip_min_total_label: "최소 총합"
+adm_tooltip_ignore: "무시"
+
 adm_compendium_current_heading: "현재 보정 수치"
 adm_compendium_current_intro: "양수는 받는 피해를 늘리고, 음수는 받는 피해를 줄입니다."
 
@@ -10,8 +14,8 @@ adm_compendium_formula: "받는 피해 = 원래 피해 x (100% + 보정 수치 �
 adm_compendium_example: "예시: {0} = {1}이므로 플레이어 최소 피해를 적용하기 전에는 원래 피해의 {2}를 받습니다."
 
 adm_compendium_minimum_heading: "플레이어 최소 피해"
-adm_compendium_minimum_intro: "이 제한은 대상이 플레이어일 때만 적용됩니다. MinTotal은 허용되는 가장 낮은 보정 수치 총합입니다. 최소 피해가 10%라면 MinTotal은 -90%입니다."
-adm_compendium_minimum_line: "{0}: 원래 피해의 최소 {1} (MinTotal {2})"
+adm_compendium_minimum_intro: "이 제한은 대상이 플레이어일 때만 적용됩니다. 최소 총합은 허용되는 가장 낮은 보정 수치 총합입니다. 최소 피해가 10%라면 최소 총합은 -90%입니다."
+adm_compendium_minimum_line: "{0}: 원래 피해의 최소 {1} (최소 총합 {2})"
 adm_compendium_spirit_rule: "영혼 피해에는 플레이어 최소 피해가 없습니다. 바닐라 플레이어가 원래 영혼 피해에 면역이기 때문입니다."
 
 adm_compendium_vanilla_heading: "바닐라와의 차이"

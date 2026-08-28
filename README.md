@@ -125,6 +125,14 @@ Damage modifier tooltip lines can show the configured modifier percent, for exam
 Damage modifier: Resistant VS Fire (-30%)
 ```
 
+When the exact passive armor item is equipped, or the displayed status effect is currently active on the local player, the same line also shows the combined modifier for that damage type:
+
+```text
+Damage modifier: Resistant VS Fire (-30% / Net -45%)
+```
+
+`Net` is the raw sum before the player minimum damage cap. Direct weapon and shield damage modifiers are block-only and are not included in passive Net; an Equip or Set status effect from those items is included while that effect is active.
+
 This non-compendium percent suffix is controlled by a client-only config option:
 
 ```text
@@ -132,11 +140,13 @@ This non-compendium percent suffix is controlled by a client-only config option:
 Show Modifier Percent in Tooltips Outside Compendium = On
 ```
 
-The Active effects compendium always shows fuller information, including `MinTotal`:
+The Active effects compendium always shows fuller information, including the current `Net` for active effects and `MinTotal` when applicable:
 
 ```text
-Damage modifier: Resistant VS Fire (-30% / MinTotal -90%)
+Damage modifier: Resistant VS Fire (-30% / Net -45% / MinTotal -90%)
 ```
+
+If the combined result is Valheim's special `Ignore` modifier, it is shown as `Net Ignore` and `MinTotal` is omitted because that cap does not apply.
 
 The Compendium also includes an `Additive Damage Modifiers` page. It reads the current server configuration and explains:
 

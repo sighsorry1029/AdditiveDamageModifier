@@ -15,7 +15,7 @@ namespace AdditiveDamageModifier;
 public class AdditiveDamageModifierPlugin : BaseUnityPlugin
 {
     internal const string ModName = "AdditiveDamageModifier";
-    internal const string ModVersion = "1.1.3";
+    internal const string ModVersion = "1.2.1";
     internal const string Author = "sighsorry";
     private const string ModGUID = $"{Author}.{ModName}";
     private readonly Harmony _harmony = new(ModGUID);
@@ -72,7 +72,7 @@ public class AdditiveDamageModifierPlugin : BaseUnityPlugin
             "Show Modifier Percent in Tooltips Outside Compendium",
             Toggle.On,
             new ConfigDescription(
-                "If on, item and other non-compendium damage modifier tooltip lines include the configured modifier percent, like (-30%). The Active effects compendium always shows percent and MinTotal.",
+                "If on, item and other non-compendium damage modifier tooltip lines include the configured source percent, like (-30%). Applied passive armor and active status effects also show the current player Net. The Active effects compendium always shows percent, Net for active effects, and MinTotal when applicable.",
                 null,
                 new ConfigurationManagerAttributes { Order = 900 }),
             synchronizedSetting: false);

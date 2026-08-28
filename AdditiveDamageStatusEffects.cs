@@ -349,23 +349,126 @@ internal static class AdditiveDamageDisplay
         return FormatPercent(minimumTotal * 100f);
     }
 
-    public static string GetModifierTooltipSuffix(HitData.DamageType damageType, HitData.DamageModifier modifier, bool includeMinimumTotal)
+    public static string GetModifierTooltipSuffix(
+        HitData.DamageType damageType,
+        HitData.DamageModifier modifier,
+        bool includeMinimumTotal,
+        HitData.DamageModifier? netModifier)
     {
-        string modifierPercent = FormatModifierPercent(modifier);
-        if (!includeMinimumTotal)
+        if (!includeMinimumTotal && !AdditiveDamageModifierPlugin.ShowModifierPercentInTooltipsOutsideCompendium())
         {
-            return AdditiveDamageModifierPlugin.ShowModifierPercentInTooltipsOutsideCompendium()
-                ? $" ({modifierPercent})"
-                : "";
+            return "";
         }
 
-        return $" ({modifierPercent} / MinTotal {FormatMinimumTotalPercent(damageType)})";
+        string suffix = $" ({FormatModifierPercent(modifier)}";
+        if (netModifier.HasValue && TryFormatNetModifier(netModifier.Value, out string netText))
+        {
+            suffix += $" / $adm_tooltip_net_label {netText}";
+        }
+
+        if (includeMinimumTotal && netModifier != HitData.DamageModifier.Ignore)
+        {
+            suffix += $" / $adm_tooltip_min_total_label {FormatMinimumTotalPercent(damageType)}";
+        }
+
+        return suffix + ")";
     }
 
     internal static string FormatPercent(float value)
     {
         int roundedValue = Mathf.RoundToInt(value);
         return $"{roundedValue.ToString("+0;-0;0", CultureInfo.InvariantCulture)}%";
+    }
+
+    private static bool TryFormatNetModifier(HitData.DamageModifier modifier, out string text)
+    {
+        if (modifier == HitData.DamageModifier.Ignore)
+        {
+            text = "$adm_tooltip_ignore";
+            return true;
+        }
+
+        if (modifier == HitData.DamageModifier.Normal
+            || AdditiveDamageMath.IsCustomModifier(modifier)
+            || AdditiveDamageDefinitions.TryGetDamageModifier(modifier, out _))
+        {
+            text = FormatModifierPercent(modifier);
+            return true;
+        }
+
+        text = "";
+        return false;
+    }
+}
+
+[HarmonyPatch(
+    typeof(ItemDrop.ItemData),
+    nameof(ItemDrop.ItemData.GetTooltip),
+    new[] { typeof(ItemDrop.ItemData), typeof(int), typeof(bool), typeof(float), typeof(int) })]
+internal static class ItemDataGetTooltipAdditiveDamagePatch
+{
+    private static void Prefix([HarmonyArgument(0)] ItemDrop.ItemData item, out bool __state)
+    {
+        __state = false;
+        if (item?.m_shared?.m_damageModifiers == null)
+        {
+            return;
+        }
+
+        Player player = Player.m_localPlayer;
+        bool isApplied = player
+                         && IsPassiveArmor(item.m_shared.m_itemType)
+                         && player.IsItemEquiped(item);
+        AdditiveDamageTooltipContext.PushModifierSource(item.m_shared.m_damageModifiers, isApplied);
+        __state = true;
+    }
+
+    private static Exception? Finalizer(Exception? __exception, bool __state)
+    {
+        if (__state)
+        {
+            AdditiveDamageTooltipContext.PopModifierSource();
+        }
+
+        return __exception;
+    }
+
+    private static bool IsPassiveArmor(ItemDrop.ItemData.ItemType itemType)
+    {
+        return itemType is ItemDrop.ItemData.ItemType.Helmet
+            or ItemDrop.ItemData.ItemType.Chest
+            or ItemDrop.ItemData.ItemType.Legs
+            or ItemDrop.ItemData.ItemType.Shoulder;
+    }
+}
+
+[HarmonyPatch(typeof(SE_Stats), nameof(SE_Stats.GetTooltipString))]
+internal static class SEStatsGetTooltipStringAdditiveDamagePatch
+{
+    private static void Prefix(SE_Stats __instance, out bool __state)
+    {
+        __state = false;
+        if (__instance?.m_mods == null)
+        {
+            return;
+        }
+
+        Player player = Player.m_localPlayer;
+        SEMan? statusEffectManager = player ? player.GetSEMan() : null;
+        bool isApplied = statusEffectManager != null
+                         && statusEffectManager.HaveStatusEffect(__instance.NameHash());
+        AdditiveDamageTooltipContext.PushModifierSource(__instance.m_mods, isApplied);
+        __state = true;
+    }
+
+    private static Exception? Finalizer(Exception? __exception, bool __state)
+    {
+        if (__state)
+        {
+            AdditiveDamageTooltipContext.PopModifierSource();
+        }
+
+        return __exception;
     }
 }
 
@@ -404,12 +507,31 @@ internal static class TextsDialogAddActiveEffectsPatch
 
 internal static class AdditiveDamageTooltipContext
 {
+    private readonly struct ModifierSource
+    {
+        public ModifierSource(List<HitData.DamageModPair> modifiers, bool isApplied)
+        {
+            Modifiers = modifiers;
+            IsApplied = isApplied;
+        }
+
+        public List<HitData.DamageModPair> Modifiers { get; }
+        public bool IsApplied { get; }
+    }
+
     [System.ThreadStatic] private static int _activeEffectsCompendiumDepth;
+    [System.ThreadStatic] private static int _tooltipScopeDepth;
+    [System.ThreadStatic] private static Stack<ModifierSource>? _modifierSources;
+    [System.ThreadStatic] private static bool _netModifiersResolved;
+    [System.ThreadStatic] private static bool _hasNetModifiers;
+    [System.ThreadStatic] private static HitData.DamageModifiers _netModifiers;
+    private static bool _loggedNetCalculationFailure;
 
     public static bool IncludeMinimumTotal => _activeEffectsCompendiumDepth > 0;
 
     public static void PushActiveEffectsCompendium()
     {
+        BeginTooltipScope();
         _activeEffectsCompendiumDepth++;
     }
 
@@ -418,6 +540,121 @@ internal static class AdditiveDamageTooltipContext
         if (_activeEffectsCompendiumDepth > 0)
         {
             _activeEffectsCompendiumDepth--;
+            EndTooltipScope();
+        }
+    }
+
+    public static void PushModifierSource(List<HitData.DamageModPair> modifiers, bool isApplied)
+    {
+        BeginTooltipScope();
+        try
+        {
+            (_modifierSources ??= new Stack<ModifierSource>(4)).Push(new ModifierSource(modifiers, isApplied));
+        }
+        catch
+        {
+            EndTooltipScope();
+            throw;
+        }
+    }
+
+    public static void PopModifierSource()
+    {
+        if (_modifierSources is { Count: > 0 })
+        {
+            _modifierSources.Pop();
+        }
+
+        EndTooltipScope();
+    }
+
+    public static bool TryGetNetModifiers(
+        List<HitData.DamageModPair> modifiers,
+        out HitData.DamageModifiers netModifiers)
+    {
+        netModifiers = default;
+        if (!IsAppliedSource(modifiers))
+        {
+            return false;
+        }
+
+        if (!_netModifiersResolved)
+        {
+            _netModifiersResolved = true;
+            Player player = Player.m_localPlayer;
+            if (player)
+            {
+                try
+                {
+                    _netModifiers = player.GetDamageModifiers();
+                    _hasNetModifiers = true;
+                }
+                catch (Exception exception)
+                {
+                    if (!_loggedNetCalculationFailure)
+                    {
+                        _loggedNetCalculationFailure = true;
+                        AdditiveDamageModifierPlugin.AdditiveDamageModifierLogger.LogWarning(
+                            $"Could not calculate current player Net damage modifiers: {exception.Message}");
+                    }
+                }
+            }
+        }
+
+        if (!_hasNetModifiers)
+        {
+            return false;
+        }
+
+        netModifiers = _netModifiers;
+        return true;
+    }
+
+    private static bool IsAppliedSource(List<HitData.DamageModPair> modifiers)
+    {
+        if (_modifierSources is not { Count: > 0 } sources)
+        {
+            return false;
+        }
+
+        foreach (ModifierSource source in sources)
+        {
+            if (ReferenceEquals(source.Modifiers, modifiers))
+            {
+                return source.IsApplied;
+            }
+        }
+
+        return false;
+    }
+
+    private static void BeginTooltipScope()
+    {
+        if (_tooltipScopeDepth == 0)
+        {
+            _modifierSources?.Clear();
+            _netModifiersResolved = false;
+            _hasNetModifiers = false;
+            _netModifiers = default;
+        }
+
+        _tooltipScopeDepth++;
+    }
+
+    private static void EndTooltipScope()
+    {
+        if (_tooltipScopeDepth == 0)
+        {
+            return;
+        }
+
+        _tooltipScopeDepth--;
+        if (_tooltipScopeDepth == 0)
+        {
+            _modifierSources?.Clear();
+            _netModifiersResolved = false;
+            _hasNetModifiers = false;
+            _netModifiers = default;
         }
     }
 }
@@ -435,6 +672,11 @@ internal static class AdditiveDamageTooltipBuilder
             return true;
         }
 
+        bool showModifierDetails = includeMinimumTotal
+                                   || AdditiveDamageModifierPlugin.ShowModifierPercentInTooltipsOutsideCompendium();
+        HitData.DamageModifiers netModifiers = default;
+        bool includeNet = showModifierDetails
+                          && AdditiveDamageTooltipContext.TryGetNetModifiers(mods, out netModifiers);
         string text = "";
         foreach (HitData.DamageModPair mod in mods)
         {
@@ -463,7 +705,11 @@ internal static class AdditiveDamageTooltipBuilder
             text += "\n$inventory_dmgmod: ";
             text += $"<color=orange>{modifierDefinition.LocalizationKey}</color> VS ";
             text += $"<color=orange>{damageTypeDefinition.LocalizationKey}</color>";
-            text += AdditiveDamageDisplay.GetModifierTooltipSuffix(mod.m_type, mod.m_modifier, includeMinimumTotal);
+            text += AdditiveDamageDisplay.GetModifierTooltipSuffix(
+                mod.m_type,
+                mod.m_modifier,
+                includeMinimumTotal,
+                includeNet ? netModifiers.GetModifier(mod.m_type) : null);
         }
 
         tooltip = text;

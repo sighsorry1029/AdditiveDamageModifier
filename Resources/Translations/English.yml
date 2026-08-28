@@ -1,6 +1,10 @@
 adm_compendium_title: "Additive Damage Modifiers"
 adm_compendium_intro: "Resistance and weakness values add together for each damage type. This page uses the server's current configuration."
 
+adm_tooltip_net_label: "Net"
+adm_tooltip_min_total_label: "MinTotal"
+adm_tooltip_ignore: "Ignore"
+
 adm_compendium_current_heading: "Current Modifier Values"
 adm_compendium_current_intro: "Positive values increase damage taken. Negative values reduce damage taken."
 
