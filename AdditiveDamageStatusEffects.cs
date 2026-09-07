@@ -283,56 +283,95 @@ internal static class HudUpdateStatusEffectsPatch
         int count = Mathf.Min(statusEffects.Count, ___m_statusEffects.Count);
         for (int i = 0; i < count; i++)
         {
-            TMP_Text? nameText = GetNameText(___m_statusEffects[i]);
-            if (nameText == null)
+            RectTransform statusEffectRoot = ___m_statusEffects[i];
+            if (!statusEffectRoot)
             {
                 continue;
             }
 
-            RectTransform? nameTransform = nameText.transform as RectTransform;
-            if (nameTransform == null)
-            {
-                continue;
-            }
-
-            HudStatusEffectNamePosition position = nameText.GetComponent<HudStatusEffectNamePosition>()
-                                                   ?? nameText.gameObject.AddComponent<HudStatusEffectNamePosition>();
+            HudStatusEffectNamePosition position = statusEffectRoot.GetComponent<HudStatusEffectNamePosition>();
             if (statusEffects[i] is SE_AdditiveDamageModifier statusEffect)
             {
-                nameText.text = statusEffect.GetHudName();
-                nameTransform.anchoredPosition = position.OriginalPosition + new Vector2(0f, HudNameVerticalOffset);
+                if (!position)
+                {
+                    position = statusEffectRoot.gameObject.AddComponent<HudStatusEffectNamePosition>();
+                }
+
+                position.Apply(statusEffect, HudNameVerticalOffset);
             }
-            else
+            else if (position)
             {
-                nameTransform.anchoredPosition = position.OriginalPosition;
+                position.Restore();
             }
         }
-    }
-
-    private static TMP_Text? GetNameText(RectTransform statusEffectRoot)
-    {
-        foreach (TMP_Text text in statusEffectRoot.GetComponentsInChildren<TMP_Text>(true))
-        {
-            if (text.gameObject.name != "TimeText")
-            {
-                return text;
-            }
-        }
-
-        return null;
     }
 }
 
 internal sealed class HudStatusEffectNamePosition : MonoBehaviour
 {
+    private readonly List<TMP_Text> _nameCandidates = new(2);
+    private TMP_Text? _nameText;
+    private RectTransform? _nameTransform;
+    private bool _isOffsetApplied;
+
     public Vector2 OriginalPosition { get; private set; }
 
-    private void Awake()
+    public void Apply(SE_AdditiveDamageModifier statusEffect, float verticalOffset)
     {
-        if (transform is RectTransform rectTransform)
+        if (!TryResolveName())
         {
-            OriginalPosition = rectTransform.anchoredPosition;
+            return;
         }
+
+        if (!_isOffsetApplied)
+        {
+            OriginalPosition = _nameTransform!.anchoredPosition;
+        }
+
+        _nameText!.text = statusEffect.GetHudName();
+        _nameTransform!.anchoredPosition = OriginalPosition + new Vector2(0f, verticalOffset);
+        _isOffsetApplied = true;
+    }
+
+    public void Restore()
+    {
+        if (!_isOffsetApplied)
+        {
+            return;
+        }
+
+        if (_nameTransform)
+        {
+            _nameTransform!.anchoredPosition = OriginalPosition;
+        }
+
+        _isOffsetApplied = false;
+    }
+
+    private bool TryResolveName()
+    {
+        if (_nameText && _nameTransform)
+        {
+            return true;
+        }
+
+        // A HUD mod may replace the text component while keeping its shifted transform.
+        Restore();
+        _nameText = null;
+        _nameTransform = null;
+        GetComponentsInChildren(true, _nameCandidates);
+        foreach (TMP_Text text in _nameCandidates)
+        {
+            if (text && text.gameObject.name != "TimeText" && text.transform is RectTransform nameTransform)
+            {
+                _nameText = text;
+                _nameTransform = nameTransform;
+                break;
+            }
+        }
+
+        _nameCandidates.Clear();
+        return _nameText && _nameTransform;
     }
 }
 
@@ -349,55 +388,10 @@ internal static class AdditiveDamageDisplay
         return FormatPercent(minimumTotal * 100f);
     }
 
-    public static string GetModifierTooltipSuffix(
-        HitData.DamageType damageType,
-        HitData.DamageModifier modifier,
-        bool includeMinimumTotal,
-        HitData.DamageModifier? netModifier)
-    {
-        if (!includeMinimumTotal && !AdditiveDamageModifierPlugin.ShowModifierPercentInTooltipsOutsideCompendium())
-        {
-            return "";
-        }
-
-        string suffix = $" ({FormatModifierPercent(modifier)}";
-        if (netModifier.HasValue && TryFormatNetModifier(netModifier.Value, out string netText))
-        {
-            suffix += $" / $adm_tooltip_net_label {netText}";
-        }
-
-        if (includeMinimumTotal && netModifier != HitData.DamageModifier.Ignore)
-        {
-            suffix += $" / $adm_tooltip_min_total_label {FormatMinimumTotalPercent(damageType)}";
-        }
-
-        return suffix + ")";
-    }
-
     internal static string FormatPercent(float value)
     {
         int roundedValue = Mathf.RoundToInt(value);
         return $"{roundedValue.ToString("+0;-0;0", CultureInfo.InvariantCulture)}%";
-    }
-
-    private static bool TryFormatNetModifier(HitData.DamageModifier modifier, out string text)
-    {
-        if (modifier == HitData.DamageModifier.Ignore)
-        {
-            text = "$adm_tooltip_ignore";
-            return true;
-        }
-
-        if (modifier == HitData.DamageModifier.Normal
-            || AdditiveDamageMath.IsCustomModifier(modifier)
-            || AdditiveDamageDefinitions.TryGetDamageModifier(modifier, out _))
-        {
-            text = FormatModifierPercent(modifier);
-            return true;
-        }
-
-        text = "";
-        return false;
     }
 }
 
@@ -705,15 +699,58 @@ internal static class AdditiveDamageTooltipBuilder
             text += "\n$inventory_dmgmod: ";
             text += $"<color=orange>{modifierDefinition.LocalizationKey}</color> VS ";
             text += $"<color=orange>{damageTypeDefinition.LocalizationKey}</color>";
-            text += AdditiveDamageDisplay.GetModifierTooltipSuffix(
-                mod.m_type,
-                mod.m_modifier,
-                includeMinimumTotal,
-                includeNet ? netModifiers.GetModifier(mod.m_type) : null);
+            if (showModifierDetails)
+            {
+                text += GetModifierTooltipSuffix(
+                    mod.m_type,
+                    mod.m_modifier,
+                    includeMinimumTotal,
+                    includeNet ? netModifiers.GetModifier(mod.m_type) : null);
+            }
         }
 
         tooltip = text;
         return true;
+    }
+
+    private static string GetModifierTooltipSuffix(
+        HitData.DamageType damageType,
+        HitData.DamageModifier modifier,
+        bool includeMinimumTotal,
+        HitData.DamageModifier? netModifier)
+    {
+        string suffix = $" ({AdditiveDamageDisplay.FormatModifierPercent(modifier)}";
+        if (netModifier.HasValue && TryFormatNetModifier(netModifier.Value, out string netText))
+        {
+            suffix += $" / $adm_tooltip_net_label {netText}";
+        }
+
+        if (includeMinimumTotal && netModifier != HitData.DamageModifier.Ignore)
+        {
+            suffix += $" / $adm_tooltip_min_total_label {AdditiveDamageDisplay.FormatMinimumTotalPercent(damageType)}";
+        }
+
+        return suffix + ")";
+    }
+
+    private static bool TryFormatNetModifier(HitData.DamageModifier modifier, out string text)
+    {
+        if (modifier == HitData.DamageModifier.Ignore)
+        {
+            text = "$adm_tooltip_ignore";
+            return true;
+        }
+
+        if (modifier == HitData.DamageModifier.Normal
+            || AdditiveDamageMath.IsCustomModifier(modifier)
+            || AdditiveDamageDefinitions.TryGetDamageModifier(modifier, out _))
+        {
+            text = AdditiveDamageDisplay.FormatModifierPercent(modifier);
+            return true;
+        }
+
+        text = "";
+        return false;
     }
 }
 

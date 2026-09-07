@@ -133,6 +133,8 @@ Damage modifier: Resistant VS Fire (-30% / Net -45%)
 
 `Net` is the raw sum before the player minimum damage cap. Direct weapon and shield damage modifiers are block-only and are not included in passive Net; an Equip or Set status effect from those items is included while that effect is active.
 
+Net is calculated at most once per tooltip generation and shared by its nested effect descriptions. Valheim can regenerate an item tooltip every frame while the inventory is open; this is not a cache for the entire time the tooltip is visible.
+
 This non-compendium percent suffix is controlled by a client-only config option:
 
 ```text
@@ -145,6 +147,8 @@ The Active effects compendium always shows fuller information, including the cur
 ```text
 Damage modifier: Resistant VS Fire (-30% / Net -45% / MinTotal -90%)
 ```
+
+The Active effects page shares one Net snapshot when the page is generated. Reopen the Compendium to refresh effects or values that changed while it was open.
 
 If the combined result is Valheim's special `Ignore` modifier, it is shown as `Net Ignore` and `MinTotal` is omitted because that cap does not apply.
 
@@ -200,6 +204,8 @@ Cold/Freezing Immunity Trigger Frost Delta Percent
 
 Default value is `-15%`. If the effective additive frost delta is less than or equal to this threshold, vanilla Cold and Freezing effects are blocked or cleared.
 
+The same threshold applies to a single resistance tier and an equal total from multiple sources. For example, with a `-50%` threshold, a single `-15%` resistance no longer grants environmental immunity. Vanilla warmth and shelter rules are unchanged.
+
 ## Config Sections
 
 `1 - General`
@@ -220,6 +226,8 @@ Default value is `-15%`. If the effective additive frost delta is less than or e
 
 ## Building Packages
 
+The project references the original Valheim assemblies from `CorlibPath`; publicized assemblies are not required. Set `GamePath` in your build arguments when using a different game installation. Reflection and Harmony field injection handle the required non-public game members.
+
 Set `ModVersion` in `Plugin.cs`, then run a Release build:
 
 ```powershell
@@ -227,6 +235,26 @@ dotnet build AdditiveDamageModifier.csproj -c Release
 ```
 
 After ILRepack completes, the Release build updates `Thunderstore/manifest.json` to the DLL version and creates both `Thunderstore/AdditiveDamageModifier_v<version>.zip` and `Nexus/AdditiveDamageModifier_v<version>.zip`. Rebuilding the same version replaces those archives. Debug builds do not update the manifest or create packages. Release packaging currently requires Windows PowerShell. Update the changelog manually when changing versions.
+
+## Regression Checks
+
+Build the current code and run the actual-DLL checks with PowerShell 7:
+
+```powershell
+dotnet build AdditiveDamageModifier.csproj -c Debug /p:DeployToGame=false
+pwsh -NoProfile -File .\Test-Mod.ps1
+```
+
+Use `-AssemblyPath` for a different build output and `-GamePath` for a different Valheim installation. The script does not launch the game or save configuration. It checks managed calculations, context cleanup, translation contracts, and game patch targets; it does not replace live Unity or multiplayer testing.
+
+Before releasing, also check these in game:
+
+- HUD slots with no ADM effects, multiple ADM effects, ADM-to-normal replacement at the same effect count, and full slot rebuilds. Verify layout at different UI scales and with HUD mods.
+- Cold/Freezing thresholds just below, equal to, and above a resistance value, including one source versus an equal combined value, Immune, Ignore, and warm areas.
+- Equipped armor, active Equip/Set/Mead effects, tooltip details Off, and reopening the Active effects page after an effect expires.
+- Existing and migrated config values across restart, administrator locks, synchronized settings, and matching/mismatched versions on client, host, and dedicated server.
+
+Use Unity Profiler to compare HUD allocations and CPU time with the inventory closed and open. Runtime hot unload/reload is not a validated lifecycle; the icon cache and registered status effects are intended to last for the process.
 
 ## Github
 

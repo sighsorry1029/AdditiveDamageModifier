@@ -2,6 +2,8 @@ namespace AdditiveDamageModifier;
 
 internal static class AdditiveDamageDefinitions
 {
+    // DisplayName participates in persisted config keys; StatusName participates in
+    // public adm_ effect names/hashes. Renaming either requires compatibility handling.
     public static readonly DamageTypeDefinition[] DamageTypes =
     {
         new(HitData.DamageType.Blunt, "Blunt", "blunt", "$inventory_blunt", hasStatusEffect: true, hasPlayerMinimumCap: true),

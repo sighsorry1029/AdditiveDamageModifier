@@ -35,7 +35,6 @@ internal static class AdditiveDamageMath
         float combinedDelta = ModifierToDelta(current) + ModifierToDelta(incoming);
         // Do not clamp by the minimum damage cap here; clamping during accumulation makes
         // the final result order-dependent when several modifiers are combined.
-        combinedDelta = Mathf.Clamp(combinedDelta, -CombineClampAbs, CombineClampAbs);
         return EncodeCustomDelta(combinedDelta);
     }
 
@@ -140,10 +139,6 @@ internal static class DamageCapContext
             }
 
             stack.RemoveAt(i);
-            if (stack.Count == 0)
-            {
-                _playerHitStack = null;
-            }
             return;
         }
     }
@@ -157,19 +152,21 @@ internal static class DamageCapContext
 [HarmonyPatch(typeof(Character), "RPC_Damage")]
 internal static class CharacterRpcDamagePlayerCapPatch
 {
-    private static void Prefix(Character __instance, HitData hit)
+    private static void Prefix(Character __instance, HitData hit, out HitData? __state)
     {
+        __state = null;
         if (__instance is Player && hit != null)
         {
             DamageCapContext.EnterPlayerContext(hit);
+            __state = hit;
         }
     }
 
-    private static Exception? Finalizer(Character __instance, HitData hit, Exception? __exception)
+    private static Exception? Finalizer(HitData? __state, Exception? __exception)
     {
-        if (__instance is Player && hit != null)
+        if (__state != null)
         {
-            DamageCapContext.ExitPlayerContext(hit);
+            DamageCapContext.ExitPlayerContext(__state);
         }
 
         return __exception;
@@ -364,7 +361,9 @@ internal static class PlayerEnvStatusImmunityPatch
             return HitData.DamageModifier.SlightlyResistant;
         }
 
-        return modifier;
+        // Vanilla also treats raw resistant tiers as environmental immunity. Do not
+        // let a single source bypass a stricter threshold than an equal custom sum.
+        return HitData.DamageModifier.Normal;
     }
 
     private static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)

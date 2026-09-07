@@ -57,7 +57,6 @@
         <CorlibPath Condition="'$(CorlibPath)' == '' AND Exists('$(GamePath)\valheim_Data\Managed')">$(GamePath)\valheim_Data\Managed</CorlibPath>
         <CorlibPath Condition="'$(CorlibPath)' == '' AND Exists('$(GamePath)\unstripped_corelib')">$(GamePath)\unstripped_corelib</CorlibPath>
         <CorlibPath Condition="'$(CorlibPath)' == '' AND '$(GamePath)' != ''">$(GamePath)\valheim_Data\Managed</CorlibPath>
-        <PublicizedAssembliesPath Condition="'$(PublicizedAssembliesPath)' == '' AND '$(GamePath)' != ''">$(GamePath)\valheim_Data\Managed\publicized_assemblies</PublicizedAssembliesPath>
         <CopyOutputDLLPath Condition="'$(CopyOutputDLLPath)' == '' AND '$(GamePath)' != ''">$(GamePath)\BepInEx\plugins</CopyOutputDLLPath>
     </PropertyGroup>
     <ItemGroup>
@@ -65,13 +64,13 @@
             <HintPath>$(BepInExPath)\core\0Harmony.dll</HintPath>
         </Reference>
         <Reference Include="assembly_utils">
-            <HintPath>$(PublicizedAssembliesPath)\assembly_utils_publicized.dll</HintPath>
+            <HintPath>$(CorlibPath)\assembly_utils.dll</HintPath>
         </Reference>
         <Reference Include="assembly_guiutils">
-            <HintPath>$(PublicizedAssembliesPath)\assembly_guiutils_publicized.dll</HintPath>
+            <HintPath>$(CorlibPath)\assembly_guiutils.dll</HintPath>
         </Reference>
         <Reference Include="assembly_valheim">
-            <HintPath>$(PublicizedAssembliesPath)\assembly_valheim_publicized.dll</HintPath>
+            <HintPath>$(CorlibPath)\assembly_valheim.dll</HintPath>
         </Reference>
         <Reference Include="BepInEx">
             <HintPath>$(BepInExPath)\core\BepInEx.dll</HintPath>
