@@ -1,5 +1,12 @@
 adm_compendium_title: "가산 피해 보정"
-adm_compendium_intro: "피해 유형별 저항과 약점 수치를 모두 더해서 적용합니다. 이 페이지에는 현재 서버 설정값이 표시됩니다."
+adm_compendium_intro: "캐릭터에만 저항과 약점을 합산하며, 플레이어와 비플레이어 캐릭터에 별도의 설정을 적용합니다. 나무·통나무·광석·건축물의 기존 피해 처리는 변경하지 않습니다. 이 페이지에는 현재 서버 설정값이 표시됩니다."
+
+adm_compendium_pov_heading: "PathOfValheiman 호환 모드"
+adm_compendium_pov_intro: "시작 시 PathOfValheiman을 감지하여 ADM 저항 패치를 비활성화했습니다. 저항 처리는 게임, PathOfValheiman 및 함께 설치된 다른 모드에 맡깁니다."
+adm_compendium_pov_disabled: "ADM의 플레이어·비플레이어 보정 비율, 가산 합산, 플레이어 최소 피해, 플레이어의 기본 영혼·벌목·채광 면역을 무시로 바꾸는 처리, 추위·동결 임계값은 적용하지 않습니다. ADM의 개별 보정 비율·현재 총합·최소 총합 표시도 숨깁니다."
+adm_compendium_pov_settings: "기존 ADM 설정은 삭제하지 않고 보존합니다. 이 모드에서는 비활성화된 저항 설정이 게임 동작에 영향을 주지 않습니다. PathOfValheiman을 제거하거나 비활성화한 뒤 게임을 재시작하면 ADM 저항 처리가 복원됩니다. 실행 중 플러그인 교체는 지원하지 않습니다."
+adm_compendium_pov_retained: "낙하 피해 설정은 계속 적용됩니다. 최대 기본 피해 {0}, 배율 {1}배. adm_* 상태 효과도 계속 등록되며, ADM 비율이 아닌 현재 활성화된 저항 규칙에 원래 보정 단계를 전달합니다."
+adm_compendium_pov_cold: "추위·동결 보호는 적절한 장비나 냉기 저항 미드 등 게임의 냉기 저항 단계를 통해 유지됩니다. PathOfValheiman의 수치형 냉기 저항 보너스만으로 이 보호가 생기지는 않습니다. 별도의 추위 저항은 이미 적용된 추위·동결 효과의 페널티를 줄입니다."
 
 adm_tooltip_net_label: "현재 총합"
 adm_tooltip_min_total_label: "최소 총합"
@@ -7,22 +14,24 @@ adm_tooltip_ignore: "무시"
 
 adm_compendium_current_heading: "현재 보정 수치"
 adm_compendium_current_intro: "양수는 받는 피해를 늘리고, 음수는 받는 피해를 줄입니다."
+adm_compendium_player_heading: "플레이어"
+adm_compendium_nonplayer_heading: "비플레이어 캐릭터"
 
 adm_compendium_calculation_heading: "피해 계산 방식"
 adm_compendium_sum_rule: "한 피해 유형에 적용된 모든 보정 수치를 먼저 더합니다. 플레이어 최소 피해가 설정되어 있으면 합산한 뒤에 적용합니다."
 adm_compendium_formula: "받는 피해 = 원래 피해 x (100% + 보정 수치 총합)"
-adm_compendium_example: "예시: {0} = {1}이므로 플레이어 최소 피해를 적용하기 전에는 원래 피해의 {2}를 받습니다."
+adm_compendium_example: "플레이어 예시: {0} = {1}이므로 플레이어 최소 피해를 적용하기 전에는 원래 피해의 {2}를 받습니다."
 
 adm_compendium_minimum_heading: "플레이어 최소 피해"
 adm_compendium_minimum_intro: "이 제한은 대상이 플레이어일 때만 적용됩니다. 최소 총합은 허용되는 가장 낮은 보정 수치 총합입니다. 최소 피해가 10%라면 최소 총합은 -90%입니다."
 adm_compendium_minimum_line: "{0}: 원래 피해의 최소 {1} (최소 총합 {2})"
-adm_compendium_spirit_rule: "영혼 피해에는 플레이어 최소 피해가 없습니다. 바닐라 플레이어가 원래 영혼 피해에 면역이기 때문입니다."
+adm_compendium_spirit_rule: "플레이어 초기화 시 영혼·벌목·채광의 기본 면역을 무시로 바꿉니다. 이 피해 유형에는 플레이어 최소 피해가 없으며, 일반 저항·약점 효과로 무시를 상쇄할 수 없습니다. 면역이 아닌 기본값과 비플레이어 캐릭터는 변경하지 않습니다."
 
 adm_compendium_vanilla_heading: "바닐라와의 차이"
 adm_compendium_vanilla_rule: "바닐라 Valheim은 우선순위 규칙에 따라 최종 보정 단계 하나를 선택하며, 저항과 약점 수치를 서로 더하지 않습니다."
-adm_compendium_additive_rule: "이 모드는 모든 수치를 더하므로 저항과 약점이 서로 상쇄되며, 적용 순서에 따라 결과가 달라지지 않습니다."
+adm_compendium_additive_rule: "이 모드는 캐릭터의 저항과 약점 수치를 더하므로 서로 상쇄되며, 적용 순서에 따라 결과가 달라지지 않습니다. 무시는 별도로 처리합니다."
 
 adm_compendium_special_heading: "특수 규칙"
-adm_compendium_immune_rule: "면역은 {0}로 합산되므로 약점으로 상쇄할 수 있습니다. 최소 피해가 있는 피해 유형은 플레이어 최소 피해도 적용됩니다."
-adm_compendium_ignore_rule: "무시는 면역과 다릅니다. 해당 피해 유형의 피해를 항상 0으로 만들며 가산 합계에 참여하지 않습니다."
+adm_compendium_immune_rule: "플레이어의 면역은 {0}로 합산되며, 비플레이어 캐릭터는 위에 표시된 별도 값을 사용합니다. 면역은 약점으로 상쇄할 수 있고, 최소 피해가 있는 유형은 플레이어 최소 피해도 적용됩니다."
+adm_compendium_ignore_rule: "무시는 면역과 다릅니다. 저항 계산에서 해당 피해 유형의 피해를 0으로 만들며 가산 합계에 참여하지 않습니다."
 adm_compendium_frost_rule: "냉기 보정 수치 총합이 {0} 이하이면 추위와 동결에 면역이 됩니다."

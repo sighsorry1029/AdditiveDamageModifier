@@ -15,7 +15,7 @@ internal static class AdditiveDamageDefinitions
         new(HitData.DamageType.Poison, "Poison", "poison", "$inventory_poison", hasStatusEffect: true, hasPlayerMinimumCap: true),
         new(HitData.DamageType.Frost, "Frost", "frost", "$inventory_frost", hasStatusEffect: true, hasPlayerMinimumCap: true),
         new(HitData.DamageType.Lightning, "Lightning", "lightning", "$inventory_lightning", hasStatusEffect: true, hasPlayerMinimumCap: true),
-        // Players are immune to Spirit in vanilla, so Spirit intentionally has no player minimum cap.
+        // The player's default Spirit immunity is converted to Ignore, outside the minimum cap.
         new(HitData.DamageType.Spirit, "Spirit", "spirit", "$inventory_spirit", hasStatusEffect: true, hasPlayerMinimumCap: false)
     };
 
@@ -27,7 +27,7 @@ internal static class AdditiveDamageDefinitions
         new(HitData.DamageModifier.SlightlyResistant, "Slightly Resistant", "slightly_resistant", "$inventory_slightlyresistant", -15, 400),
         new(HitData.DamageModifier.Resistant, "Resistant", "resistant", "$inventory_resistant", -30, 300),
         new(HitData.DamageModifier.VeryResistant, "Very Resistant", "very_resistant", "$inventory_veryresistant", -45, 200),
-        new(HitData.DamageModifier.Immune, "Immune", "immune", "$inventory_immune")
+        new(HitData.DamageModifier.Immune, "Immune", "immune", "$inventory_immune", -100, 100)
     };
 
     public static bool TryGetDamageType(HitData.DamageType type, out DamageTypeDefinition definition)
@@ -104,22 +104,6 @@ internal readonly struct DamageModifierDefinition
         LocalizationKey = localizationKey;
         DefaultPercent = defaultPercent;
         Order = order;
-        HasConfig = true;
-    }
-
-    public DamageModifierDefinition(
-        HitData.DamageModifier modifier,
-        string displayName,
-        string statusName,
-        string localizationKey)
-    {
-        Modifier = modifier;
-        DisplayName = displayName;
-        StatusName = statusName;
-        LocalizationKey = localizationKey;
-        DefaultPercent = 0;
-        Order = 0;
-        HasConfig = false;
     }
 
     public HitData.DamageModifier Modifier { get; }
@@ -128,5 +112,4 @@ internal readonly struct DamageModifierDefinition
     public string LocalizationKey { get; }
     public int DefaultPercent { get; }
     public int Order { get; }
-    public bool HasConfig { get; }
 }

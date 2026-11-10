@@ -263,7 +263,21 @@ internal sealed class SE_AdditiveDamageModifier : SE_Stats
     public string m_damageTypeName = "";
     public string m_modifierName = "";
 
-    public override string GetIconText() => AdditiveDamageDisplay.FormatModifierPercent(m_modifier);
+    public override string GetIconText()
+    {
+        // These named effects remain valid vanilla modifier sources for external mods.
+        // Their ADM-configured percentages are not meaningful when PoV owns resistance.
+        if (!AdditiveDamageModifierPlugin.ResistancePatchesEnabled)
+        {
+            return string.Empty;
+        }
+
+        return AdditiveDamageDisplay.FormatModifierPercent(
+            m_modifier,
+            m_character is not null && m_character is not Player
+                ? DamageModifierProfile.NonPlayerCharacter
+                : DamageModifierProfile.Player);
+    }
 
     public string GetHudName() => $"{m_damageTypeName}\n{m_modifierName}";
 }
@@ -377,9 +391,11 @@ internal sealed class HudStatusEffectNamePosition : MonoBehaviour
 
 internal static class AdditiveDamageDisplay
 {
-    public static string FormatModifierPercent(HitData.DamageModifier modifier)
+    public static string FormatModifierPercent(
+        HitData.DamageModifier modifier,
+        DamageModifierProfile profile = DamageModifierProfile.Player)
     {
-        return FormatPercent(AdditiveDamageMath.ModifierToDelta(modifier) * 100f);
+        return FormatPercent(AdditiveDamageMath.ModifierToDelta(modifier, profile) * 100f);
     }
 
     public static string FormatMinimumTotalPercent(HitData.DamageType damageType)
@@ -398,7 +414,7 @@ internal static class AdditiveDamageDisplay
 [HarmonyPatch(
     typeof(ItemDrop.ItemData),
     nameof(ItemDrop.ItemData.GetTooltip),
-    new[] { typeof(ItemDrop.ItemData), typeof(int), typeof(bool), typeof(float), typeof(int) })]
+    new[] { typeof(ItemDrop.ItemData), typeof(int), typeof(bool), typeof(float), typeof(int), typeof(bool) })]
 internal static class ItemDataGetTooltipAdditiveDamagePatch
 {
     private static void Prefix([HarmonyArgument(0)] ItemDrop.ItemData item, out bool __state)

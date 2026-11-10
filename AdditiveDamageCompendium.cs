@@ -26,17 +26,31 @@ internal static class AdditiveDamageCompendium
     {
         StringBuilder builder = new();
 
+        if (!AdditiveDamageModifierPlugin.ResistancePatchesEnabled)
+        {
+            AppendHeading(builder, "$adm_compendium_pov_heading");
+            AppendParagraph(builder, Localize("$adm_compendium_pov_intro"));
+            AppendParagraph(builder, Localize("$adm_compendium_pov_disabled"));
+            AppendParagraph(builder, Localize("$adm_compendium_pov_settings"));
+            AppendParagraph(
+                builder,
+                Format(
+                    "$adm_compendium_pov_retained",
+                    "Fall damage remains active: maximum base damage {0}, multiplier {1}x. The adm_* status effects remain registered and supply their native modifier tiers to the active resistance rules, not ADM percentages.",
+                    AdditiveDamageModifierPlugin.GetFallDamageCap().ToString("0.##", CultureInfo.InvariantCulture),
+                    AdditiveDamageModifierPlugin.GetFallDamageMultiplier().ToString("0.00", CultureInfo.InvariantCulture)));
+            AppendParagraph(builder, Localize("$adm_compendium_pov_cold"));
+            return builder.ToString().TrimEnd();
+        }
+
         AppendParagraph(builder, Localize("$adm_compendium_intro"));
 
         AppendHeading(builder, "$adm_compendium_current_heading");
         AppendParagraph(builder, Localize("$adm_compendium_current_intro"));
-        foreach (DamageModifierDefinition definition in AdditiveDamageDefinitions.DamageModifiers)
-        {
-            AppendValueLine(
-                builder,
-                Localize(definition.LocalizationKey, definition.DisplayName),
-                AdditiveDamageDisplay.FormatModifierPercent(definition.Modifier));
-        }
+        AppendHeading(builder, "$adm_compendium_player_heading");
+        AppendModifierValues(builder, DamageModifierProfile.Player);
+        AppendHeading(builder, "$adm_compendium_nonplayer_heading");
+        AppendModifierValues(builder, DamageModifierProfile.NonPlayerCharacter);
 
         AppendHeading(builder, "$adm_compendium_calculation_heading");
         AppendParagraph(builder, Localize("$adm_compendium_sum_rule"));
@@ -84,7 +98,7 @@ internal static class AdditiveDamageCompendium
             builder,
             Format(
                 "$adm_compendium_immune_rule",
-                "Immune contributes {0}, so weakness can offset it. Player minimums still apply to capped damage types.",
+                "For players, Immune contributes {0}; other Characters use their own value shown above. Weakness can offset Immune, and player minimums still apply to capped damage types.",
                 AdditiveDamageDisplay.FormatModifierPercent(HitData.DamageModifier.Immune)));
         AppendParagraph(builder, Localize("$adm_compendium_ignore_rule"));
         AppendParagraph(
@@ -95,6 +109,17 @@ internal static class AdditiveDamageCompendium
                 AdditiveDamageDisplay.FormatPercent(Mathf.RoundToInt(AdditiveDamageModifierPlugin.GetFrostEnvImmunityTriggerDelta() * 100f))));
 
         return builder.ToString().TrimEnd();
+    }
+
+    private static void AppendModifierValues(StringBuilder builder, DamageModifierProfile profile)
+    {
+        foreach (DamageModifierDefinition definition in AdditiveDamageDefinitions.DamageModifiers)
+        {
+            AppendValueLine(
+                builder,
+                Localize(definition.LocalizationKey, definition.DisplayName),
+                AdditiveDamageDisplay.FormatModifierPercent(definition.Modifier, profile));
+        }
     }
 
     private static string BuildExample()
@@ -111,7 +136,7 @@ internal static class AdditiveDamageCompendium
         StringBuilder expression = new();
         for (int index = 0; index < modifiers.Length; index++)
         {
-            int value = Mathf.RoundToInt(AdditiveDamageMath.ModifierToDelta(modifiers[index]) * 100f);
+            int value = Mathf.RoundToInt(AdditiveDamageMath.ModifierToDelta(modifiers[index], DamageModifierProfile.Player) * 100f);
             total += value;
             if (index == 0)
             {
@@ -129,7 +154,7 @@ internal static class AdditiveDamageCompendium
         int damageTakenPercent = Mathf.Max(0, 100 + total);
         return Format(
             "$adm_compendium_example",
-            "Example: {0} = {1}, so {2} of the original damage is taken before any player minimum.",
+            "Player example: {0} = {1}, so {2} of the original damage is taken before any player minimum.",
             expression,
             AdditiveDamageDisplay.FormatPercent(total),
             FormatUnsignedPercent(damageTakenPercent));

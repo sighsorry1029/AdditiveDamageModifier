@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Globalization;
 using BepInEx;
+using BepInEx.Bootstrap;
 using BepInEx.Configuration;
 using BepInEx.Logging;
 using HarmonyLib;
@@ -12,16 +13,20 @@ using UnityEngine;
 namespace AdditiveDamageModifier;
 
 [BepInPlugin(ModGUID, ModName, ModVersion)]
+[BepInDependency(PathOfValheimanGuid, BepInDependency.DependencyFlags.SoftDependency)]
 public class AdditiveDamageModifierPlugin : BaseUnityPlugin
 {
     internal const string ModName = "AdditiveDamageModifier";
-    internal const string ModVersion = "1.2.3";
+    internal const string ModVersion = "1.2.5";
     internal const string Author = "sighsorry";
     private const string ModGUID = $"{Author}.{ModName}";
+    internal const string PathOfValheimanGuid = "treextr.pathofvalheiman";
+    internal static bool ResistancePatchesEnabled { get; private set; } = true;
     private readonly Harmony _harmony = new(ModGUID);
     public static readonly ManualLogSource AdditiveDamageModifierLogger = BepInEx.Logging.Logger.CreateLogSource(ModName);
     private static readonly ConfigSync ConfigSync = new(ModGUID) { DisplayName = ModName, CurrentVersion = ModVersion, MinimumRequiredVersion = ModVersion };
-    private static readonly Dictionary<HitData.DamageModifier, ConfigEntry<int>> ModifierPercentConfigs = new();
+    private static readonly Dictionary<HitData.DamageModifier, ConfigEntry<int>> PlayerModifierPercentConfigs = new();
+    private static readonly Dictionary<HitData.DamageModifier, ConfigEntry<int>> NonPlayerModifierPercentConfigs = new();
     private static readonly Dictionary<HitData.DamageType, ConfigEntry<int>> PlayerMinimumDamageCapConfigs = new();
 
     public enum Toggle
@@ -32,6 +37,7 @@ public class AdditiveDamageModifierPlugin : BaseUnityPlugin
 
     public void Awake()
     {
+        DetectResistanceCompatibility();
         Localizer.Load(this);
 
         bool saveOnSet = Config.SaveOnConfigSet;
@@ -39,13 +45,67 @@ public class AdditiveDamageModifierPlugin : BaseUnityPlugin
         try
         {
             BindConfigEntries();
-            _harmony.PatchAll(typeof(AdditiveDamageModifierPlugin).Assembly);
+            try
+            {
+                ApplyPatches();
+            }
+            catch
+            {
+                // Do not leave additive aggregation installed without its matching damage path.
+                // Only remove patches owned by this plugin; other mods keep their patches.
+                _harmony.UnpatchSelf();
+                throw;
+            }
             Config.Save();
         }
         finally
         {
             Config.SaveOnConfigSet = saveOnSet;
         }
+    }
+
+    private static void DetectResistanceCompatibility()
+    {
+        // The optional dependency makes BepInEx load PoV first. Use its actual loaded
+        // plugin, not a DLL filename or an exact version/hash. This is a hand-off of
+        // responsibility, not an adapter that calls PoV's private implementation.
+        ResistancePatchesEnabled = !(Chainloader.PluginInfos.TryGetValue(PathOfValheimanGuid, out PluginInfo pov)
+                                     && !ReferenceEquals(pov.Instance, null));
+        if (!ResistancePatchesEnabled)
+        {
+            AdditiveDamageModifierLogger.LogInfo(
+                $"Path of Valheiman {pov.Metadata.Version} is loaded: ADM resistance calculation, player base Ignore conversion, " +
+                "Cold/Freezing threshold and resistance percent/Net/MinTotal displays are disabled. " +
+                "Saved configuration, adm_* status effects and fall damage tuning are retained. Restart after changing the mod set.");
+        }
+    }
+
+    private void ApplyPatches()
+    {
+        // Match Harmony.PatchAll's class processing, but skip ADM's entire resistance
+        // feature group before any of its patches are installed. Do not unpatch PoV.
+        foreach (Type patchType in AccessTools.GetTypesFromAssembly(typeof(AdditiveDamageModifierPlugin).Assembly))
+        {
+            if (ShouldApplyPatch(patchType))
+            {
+                _harmony.CreateClassProcessor(patchType).Patch();
+            }
+        }
+    }
+
+    internal static bool ShouldApplyPatch(Type patchType)
+    {
+        // Keep this group together: aggregation without its matching damage handler,
+        // environment rule or UI would expose incompatible encoded modifier values.
+        return ResistancePatchesEnabled
+               || (patchType != typeof(PlayerBaseDamageModifiersPatch)
+                   && patchType != typeof(CharacterDamageCallSitePatch)
+                   && patchType != typeof(HitDataApplyResistancePatch)
+                   && patchType != typeof(PlayerEnvStatusImmunityPatch)
+                   && patchType != typeof(ItemDataGetTooltipAdditiveDamagePatch)
+                   && patchType != typeof(SEStatsGetTooltipStringAdditiveDamagePatch)
+                   && patchType != typeof(SEStatsDamageModifiersTooltipPatch)
+                   && patchType != typeof(TextsDialogAddActiveEffectsPatch));
     }
 
     #region ConfigOptions
@@ -58,7 +118,8 @@ public class AdditiveDamageModifierPlugin : BaseUnityPlugin
 
     private void BindConfigEntries()
     {
-        ModifierPercentConfigs.Clear();
+        PlayerModifierPercentConfigs.Clear();
+        NonPlayerModifierPercentConfigs.Clear();
         PlayerMinimumDamageCapConfigs.Clear();
 
         _serverConfigLocked = config(
@@ -79,12 +140,13 @@ public class AdditiveDamageModifierPlugin : BaseUnityPlugin
 
         foreach (DamageModifierDefinition definition in AdditiveDamageDefinitions.DamageModifiers)
         {
-            if (!definition.HasConfig)
-            {
-                continue;
-            }
-
-            ModifierPercentConfigs[definition.Modifier] = additivePercentConfig(definition);
+            // Retain the existing keys/values as the Player profile. New non-player entries
+            // inherit the saved value once, then remain independently server-synchronized.
+            ConfigEntry<int> playerValue = additivePercentConfig(
+                definition, "2 - Additive Damage", "Player", definition.DefaultPercent);
+            PlayerModifierPercentConfigs[definition.Modifier] = playerValue;
+            NonPlayerModifierPercentConfigs[definition.Modifier] = additivePercentConfig(
+                definition, "2 - Non-Player Character Damage", "Non-player Character", playerValue.Value);
         }
 
         int capOrder = 190;
@@ -140,16 +202,16 @@ public class AdditiveDamageModifierPlugin : BaseUnityPlugin
                 configAttributes(30)));
     }
 
-    internal static float GetConfiguredDelta(HitData.DamageModifier modifier)
+    internal static float GetConfiguredDelta(HitData.DamageModifier modifier, DamageModifierProfile profile)
     {
-        if (modifier == HitData.DamageModifier.Immune)
-        {
-            return -1f;
-        }
-
-        return ModifierPercentConfigs.TryGetValue(modifier, out ConfigEntry<int> configEntry)
+        Dictionary<HitData.DamageModifier, ConfigEntry<int>> entries = profile == DamageModifierProfile.Player
+            ? PlayerModifierPercentConfigs
+            : NonPlayerModifierPercentConfigs;
+        return entries.TryGetValue(modifier, out ConfigEntry<int> configEntry)
             ? configEntry.Value / 100f
-            : 0f;
+            : AdditiveDamageDefinitions.TryGetDamageModifier(modifier, out DamageModifierDefinition definition)
+                ? definition.DefaultPercent / 100f
+                : 0f;
     }
 
     internal static float GetMinimumDamageTakenMultiplier(HitData.DamageType damageType)
@@ -181,7 +243,12 @@ public class AdditiveDamageModifierPlugin : BaseUnityPlugin
 
     private ConfigEntry<T> config<T>(string group, string name, T value, ConfigDescription description, bool synchronizedSetting = true)
     {
-        ConfigDescription extendedDescription = new(description.Description + (synchronizedSetting ? " [Synced with Server]" : " [Not Synced with Server]"), description.AcceptableValues, description.Tags);
+        bool resistanceSetting = group == "2 - Additive Damage" || group == "2 - Non-Player Character Damage"
+                                 || name == "Show Modifier Percent in Tooltips Outside Compendium";
+        string compatibilityNote = !ResistancePatchesEnabled && resistanceSetting
+            ? " [Inactive while Path of Valheiman is loaded; saved value is preserved.]"
+            : string.Empty;
+        ConfigDescription extendedDescription = new(description.Description + compatibilityNote + (synchronizedSetting ? " [Synced with Server]" : " [Not Synced with Server]"), description.AcceptableValues, description.Tags);
         ConfigEntry<T> configEntry = Config.Bind(group, name, value, extendedDescription);
 
         SyncedConfigEntry<T> syncedConfigEntry = ConfigSync.AddConfigEntry(configEntry);
@@ -190,17 +257,17 @@ public class AdditiveDamageModifierPlugin : BaseUnityPlugin
         return configEntry;
     }
 
-    private ConfigEntry<int> additivePercentConfig(DamageModifierDefinition definition)
+    private ConfigEntry<int> additivePercentConfig(DamageModifierDefinition definition, string group, string target, int initialValue)
     {
         string defaultPercent = definition.DefaultPercent.ToString(CultureInfo.InvariantCulture);
         string signedDefaultPercent = definition.DefaultPercent.ToString("+0;-0;0", CultureInfo.InvariantCulture);
         return config(
-            "2 - Additive Damage",
+            group,
             $"{definition.DisplayName} Percent",
-            definition.DefaultPercent,
+            initialValue,
             new ConfigDescription(
-                $"{definition.DisplayName} modifier value. {defaultPercent} means {signedDefaultPercent}% damage taken.",
-                new AcceptableValueRange<int>(-100, 100),
+                $"{target} {definition.DisplayName} modifier value. Standard default: {defaultPercent} ({signedDefaultPercent}% damage taken). Applies only to this Character group, not trees, rocks or structures. Ignore is not affected.",
+                new AcceptableValueRange<int>(-100, definition.Modifier == HitData.DamageModifier.Immune ? 0 : 100),
                 configAttributes(definition.Order)));
     }
 

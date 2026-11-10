@@ -7,6 +7,12 @@ using UnityEngine;
 
 namespace AdditiveDamageModifier;
 
+internal enum DamageModifierProfile
+{
+    Player,
+    NonPlayerCharacter
+}
+
 internal static class AdditiveDamageMath
 {
     private const int CustomModifierBase = 1000000000;
@@ -15,7 +21,7 @@ internal static class AdditiveDamageMath
     private const int CustomModifierZero = CustomModifierBase + CombineClampAbs * CustomModifierScale;
     private const int CustomModifierMax = CustomModifierBase + 2 * CombineClampAbs * CustomModifierScale;
 
-    public static HitData.DamageModifier Combine(HitData.DamageModifier current, HitData.DamageModifier incoming)
+    public static HitData.DamageModifier Combine(HitData.DamageModifier current, HitData.DamageModifier incoming, DamageModifierProfile profile)
     {
         if (current == HitData.DamageModifier.Ignore || incoming == HitData.DamageModifier.Ignore)
         {
@@ -32,20 +38,43 @@ internal static class AdditiveDamageMath
             return current;
         }
 
-        float combinedDelta = ModifierToDelta(current) + ModifierToDelta(incoming);
+        float combinedDelta = ModifierToDelta(current, profile) + ModifierToDelta(incoming, profile);
         // Do not clamp by the minimum damage cap here; clamping during accumulation makes
         // the final result order-dependent when several modifiers are combined.
         return EncodeCustomDelta(combinedDelta);
     }
 
-    public static float ModifierToDelta(HitData.DamageModifier modifier)
+    public static float ModifierToDelta(HitData.DamageModifier modifier, DamageModifierProfile profile)
     {
         if (TryDecodeCustomDelta(modifier, out float delta))
         {
             return delta;
         }
 
-        return AdditiveDamageModifierPlugin.GetConfiguredDelta(modifier);
+        return AdditiveDamageModifierPlugin.GetConfiguredDelta(modifier, profile);
+    }
+
+    public static void ApplyModifiers(ref HitData.DamageModifiers modifiers, List<HitData.DamageModPair> incoming, DamageModifierProfile profile)
+    {
+        // Match DamageModifiers.Apply's channels, including NonPlayer, without changing
+        // that shared game method or applying character policy to unrelated structs.
+        foreach (HitData.DamageModPair pair in incoming)
+        {
+            switch (pair.m_type)
+            {
+                case HitData.DamageType.Blunt: modifiers.m_blunt = Combine(modifiers.m_blunt, pair.m_modifier, profile); break;
+                case HitData.DamageType.Slash: modifiers.m_slash = Combine(modifiers.m_slash, pair.m_modifier, profile); break;
+                case HitData.DamageType.Pierce: modifiers.m_pierce = Combine(modifiers.m_pierce, pair.m_modifier, profile); break;
+                case HitData.DamageType.Chop: modifiers.m_chop = Combine(modifiers.m_chop, pair.m_modifier, profile); break;
+                case HitData.DamageType.Pickaxe: modifiers.m_pickaxe = Combine(modifiers.m_pickaxe, pair.m_modifier, profile); break;
+                case HitData.DamageType.Fire: modifiers.m_fire = Combine(modifiers.m_fire, pair.m_modifier, profile); break;
+                case HitData.DamageType.Frost: modifiers.m_frost = Combine(modifiers.m_frost, pair.m_modifier, profile); break;
+                case HitData.DamageType.Lightning: modifiers.m_lightning = Combine(modifiers.m_lightning, pair.m_modifier, profile); break;
+                case HitData.DamageType.Poison: modifiers.m_poison = Combine(modifiers.m_poison, pair.m_modifier, profile); break;
+                case HitData.DamageType.Spirit: modifiers.m_spirit = Combine(modifiers.m_spirit, pair.m_modifier, profile); break;
+                case HitData.DamageType.NonPlayer: modifiers.m_nonPlayer = Combine(modifiers.m_nonPlayer, pair.m_modifier, profile); break;
+            }
+        }
     }
 
     internal static bool IsCustomModifier(HitData.DamageModifier modifier) => IsCustomModifierRaw((int)modifier);
@@ -76,6 +105,7 @@ internal static class AdditiveDamageMath
         float baseDamage,
         HitData.DamageModifier mod,
         float minimumDamageTakenMultiplier,
+        DamageModifierProfile profile,
         ref float normalDmg,
         ref float resistantDmg,
         ref float weakDmg,
@@ -87,7 +117,7 @@ internal static class AdditiveDamageMath
         }
 
         float minDeltaCap = minimumDamageTakenMultiplier - 1f;
-        float delta = Mathf.Clamp(ModifierToDelta(mod), minDeltaCap, 100f);
+        float delta = Mathf.Clamp(ModifierToDelta(mod, profile), minDeltaCap, 100f);
         float finalMultiplier = Mathf.Max(minimumDamageTakenMultiplier, 1f + delta);
         float finalDamage = Mathf.Max(0f, baseDamage * finalMultiplier);
 
@@ -115,61 +145,177 @@ internal static class AdditiveDamageMath
     }
 }
 
-internal static class DamageCapContext
+internal static class CharacterDamageContext
 {
-    [ThreadStatic] private static List<HitData>? _playerHitStack;
+    [ThreadStatic] private static List<HitScope>? _hitStack;
 
-    public static void EnterPlayerContext(HitData hitData)
+    private readonly struct HitScope
     {
-        (_playerHitStack ??= new List<HitData>(4)).Add(hitData);
-    }
-
-    public static void ExitPlayerContext(HitData hitData)
-    {
-        if (_playerHitStack is not { Count: > 0 } stack)
+        public HitScope(HitData hit, DamageModifierProfile profile)
         {
-            return;
+            Hit = hit;
+            Profile = profile;
         }
 
-        for (int i = stack.Count - 1; i >= 0; i--)
-        {
-            if (!ReferenceEquals(stack[i], hitData))
-            {
-                continue;
-            }
+        public HitData Hit { get; }
+        public DamageModifierProfile Profile { get; }
+    }
 
-            stack.RemoveAt(i);
-            return;
+    public static int Enter(HitData hitData, DamageModifierProfile profile)
+    {
+        if (hitData == null)
+        {
+            throw new ArgumentNullException(nameof(hitData));
+        }
+
+        List<HitScope> stack = _hitStack ??= new List<HitScope>(4);
+        int depth = stack.Count;
+        stack.Add(new HitScope(hitData, profile));
+        return depth;
+    }
+
+    public static void Exit(int depth)
+    {
+        if (_hitStack is { } stack && depth >= 0 && depth < stack.Count)
+        {
+            stack.RemoveRange(depth, stack.Count - depth);
         }
     }
 
-    public static bool IsPlayerContext(HitData hitData)
+    public static bool TryGetProfile(HitData hitData, out DamageModifierProfile profile)
     {
-        return _playerHitStack is { Count: > 0 } stack && ReferenceEquals(stack[stack.Count - 1], hitData);
+        if (_hitStack is { Count: > 0 } stack && ReferenceEquals(stack[stack.Count - 1].Hit, hitData))
+        {
+            profile = stack[stack.Count - 1].Profile;
+            return true;
+        }
+
+        profile = default;
+        return false;
     }
 }
 
-[HarmonyPatch(typeof(Character), "RPC_Damage")]
-internal static class CharacterRpcDamagePlayerCapPatch
+[HarmonyPatch(typeof(Player), "Awake")]
+internal static class PlayerBaseDamageModifiersPatch
 {
-    private static void Prefix(Character __instance, HitData hit, out HitData? __state)
+    private static void Prefix(Player __instance)
     {
-        __state = null;
-        if (__instance is Player && hit != null)
+        // Instance data only, before armor/status effects are aggregated. Respect explicit
+        // non-Immune defaults supplied by other mods; do not rewrite a shared prefab.
+        ConvertBaseImmunities(ref __instance.m_damageModifiers);
+    }
+
+    internal static void ConvertBaseImmunities(ref HitData.DamageModifiers modifiers)
+    {
+        if (modifiers.m_spirit == HitData.DamageModifier.Immune) modifiers.m_spirit = HitData.DamageModifier.Ignore;
+        if (modifiers.m_chop == HitData.DamageModifier.Immune) modifiers.m_chop = HitData.DamageModifier.Ignore;
+        if (modifiers.m_pickaxe == HitData.DamageModifier.Immune) modifiers.m_pickaxe = HitData.DamageModifier.Ignore;
+    }
+}
+
+[HarmonyPatch]
+internal static class CharacterDamageCallSitePatch
+{
+    private static readonly MethodInfo ApplyListMethod = AccessTools.Method(typeof(HitData.DamageModifiers), nameof(HitData.DamageModifiers.Apply), new[] { typeof(List<HitData.DamageModPair>) });
+    private static readonly MethodInfo ApplyResistanceMethod = AccessTools.Method(typeof(HitData), nameof(HitData.ApplyResistance), new[] { typeof(HitData.DamageModifiers), typeof(HitData.DamageModifier).MakeByRefType() });
+    private static readonly MethodInfo ApplyListForCharacterMethod = AccessTools.Method(typeof(CharacterDamageCallSitePatch), nameof(ApplyModifiersForCharacter));
+    private static readonly MethodInfo ApplyResistanceForCharacterMethod = AccessTools.Method(typeof(CharacterDamageCallSitePatch), nameof(ApplyResistanceForCharacter));
+    private static readonly FieldInfo EffectCharacterField = AccessTools.Field(typeof(StatusEffect), "m_character");
+
+    private static IEnumerable<MethodBase> TargetMethods()
+    {
+        yield return RequiredMethod(typeof(Character), "RPC_Damage", typeof(long), typeof(HitData));
+        yield return RequiredMethod(typeof(Humanoid), "BlockAttack", typeof(HitData), typeof(Character));
+        yield return RequiredMethod(typeof(Player), "ApplyArmorDamageMods", typeof(HitData.DamageModifiers).MakeByRefType());
+        yield return RequiredMethod(typeof(SE_Stats), nameof(SE_Stats.ModifyDamageMods), typeof(HitData.DamageModifiers).MakeByRefType());
+    }
+
+    private static MethodInfo RequiredMethod(Type type, string name, params Type[] arguments)
+    {
+        return AccessTools.DeclaredMethod(type, name, arguments)
+               ?? throw new MissingMethodException(type.FullName, name);
+    }
+
+    private static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions, MethodBase __originalMethod)
+    {
+        List<CodeInstruction> code = new();
+        int applyCount = 0;
+        int resistanceCount = 0;
+        foreach (CodeInstruction original in instructions)
         {
-            DamageCapContext.EnterPlayerContext(hit);
-            __state = hit;
+            CodeInstruction instruction = new(original);
+            if (instruction.Calls(ApplyListMethod)) applyCount++;
+            if (instruction.Calls(ApplyResistanceMethod)) resistanceCount++;
+            code.Add(instruction);
+        }
+
+        bool isRpc = __originalMethod.DeclaringType == typeof(Character);
+        bool isBlock = __originalMethod.DeclaringType == typeof(Humanoid);
+        bool isEffect = __originalMethod.DeclaringType == typeof(SE_Stats);
+        int expectedApply = isRpc ? 0 : isBlock || isEffect ? 1 : 4;
+        int expectedResistance = isRpc || isBlock ? 1 : 0;
+        if (applyCount != expectedApply || resistanceCount != expectedResistance
+            || (isEffect && (EffectCharacterField == null || EffectCharacterField.FieldType != typeof(Character))))
+        {
+            // Abort PatchAll, whose caller rolls back this plugin's entire patch set.
+            // Partial aggregation without resistance handling would corrupt the result.
+            throw new InvalidOperationException($"Unsupported {__originalMethod.DeclaringType?.Name}.{__originalMethod.Name} damage calls: Apply {applyCount}/{expectedApply}, ApplyResistance {resistanceCount}/{expectedResistance}.");
+        }
+
+        foreach (CodeInstruction instruction in code)
+        {
+            bool applyList = instruction.Calls(ApplyListMethod);
+            if (applyList || instruction.Calls(ApplyResistanceMethod))
+            {
+                if (instruction.blocks.Count != 0)
+                {
+                    throw new InvalidOperationException($"Unsupported exception boundary at {__originalMethod.Name} damage call.");
+                }
+
+                CodeInstruction loadOwner = new(OpCodes.Ldarg_0);
+                loadOwner.labels.AddRange(instruction.labels);
+                instruction.labels.Clear();
+                yield return loadOwner;
+                if (isEffect)
+                {
+                    // Read the effect owner's original field at this specific call site.
+                    yield return new CodeInstruction(OpCodes.Ldfld, EffectCharacterField);
+                }
+
+                instruction.opcode = OpCodes.Call;
+                instruction.operand = applyList ? ApplyListForCharacterMethod : ApplyResistanceForCharacterMethod;
+            }
+
+            yield return instruction;
         }
     }
 
-    private static Exception? Finalizer(HitData? __state, Exception? __exception)
+    internal static void ApplyModifiersForCharacter(ref HitData.DamageModifiers modifiers, List<HitData.DamageModPair> incoming, Character? character)
     {
-        if (__state != null)
+        if (ReferenceEquals(character, null))
         {
-            DamageCapContext.ExitPlayerContext(__state);
+            modifiers.Apply(incoming);
+            return;
         }
 
-        return __exception;
+        AdditiveDamageMath.ApplyModifiers(ref modifiers, incoming,
+            character is Player ? DamageModifierProfile.Player : DamageModifierProfile.NonPlayerCharacter);
+    }
+
+    internal static void ApplyResistanceForCharacter(HitData hit, HitData.DamageModifiers modifiers, out HitData.DamageModifier significantModifier, Character character)
+    {
+        int depth = CharacterDamageContext.Enter(hit,
+            character is Player ? DamageModifierProfile.Player : DamageModifierProfile.NonPlayerCharacter);
+        try
+        {
+            // Retain other mods' Harmony hooks on the common resistance method.
+            // Scope only this exact hit, not the whole RPC or all hits on this thread.
+            hit.ApplyResistance(modifiers, out significantModifier);
+        }
+        finally
+        {
+            CharacterDamageContext.Exit(depth);
+        }
     }
 }
 
@@ -228,37 +374,35 @@ internal static class CharacterUpdateGroundContactFallDamagePatch
     }
 }
 
-[HarmonyPatch(typeof(HitData.DamageModifiers), "ApplyIfBetter")]
-internal static class DamageModifiersApplyIfBetterPatch
-{
-    private static bool Prefix(ref HitData.DamageModifier original, HitData.DamageModifier mod)
-    {
-        original = AdditiveDamageMath.Combine(original, mod);
-        return false;
-    }
-}
-
 [HarmonyPatch(typeof(HitData), nameof(HitData.ApplyResistance))]
 internal static class HitDataApplyResistancePatch
 {
     private static bool Prefix(HitData __instance, HitData.DamageModifiers modifiers, ref HitData.DamageModifier significantModifier)
     {
+        if (!CharacterDamageContext.TryGetProfile(__instance, out DamageModifierProfile profile))
+        {
+            return true;
+        }
+
         float normalDmg = __instance.m_damage.m_damage;
         float resistantDmg = 0f;
         float weakDmg = 0f;
         float immuneDmg = 0f;
-        bool isPlayerContext = DamageCapContext.IsPlayerContext(__instance);
 
-        ApplyModifierForType(ref __instance.m_damage.m_blunt, modifiers.m_blunt, HitData.DamageType.Blunt, isPlayerContext, ref normalDmg, ref resistantDmg, ref weakDmg, ref immuneDmg);
-        ApplyModifierForType(ref __instance.m_damage.m_slash, modifiers.m_slash, HitData.DamageType.Slash, isPlayerContext, ref normalDmg, ref resistantDmg, ref weakDmg, ref immuneDmg);
-        ApplyModifierForType(ref __instance.m_damage.m_pierce, modifiers.m_pierce, HitData.DamageType.Pierce, isPlayerContext, ref normalDmg, ref resistantDmg, ref weakDmg, ref immuneDmg);
-        ApplyModifierForType(ref __instance.m_damage.m_chop, modifiers.m_chop, HitData.DamageType.Chop, isPlayerContext, ref normalDmg, ref resistantDmg, ref weakDmg, ref immuneDmg);
-        ApplyModifierForType(ref __instance.m_damage.m_pickaxe, modifiers.m_pickaxe, HitData.DamageType.Pickaxe, isPlayerContext, ref normalDmg, ref resistantDmg, ref weakDmg, ref immuneDmg);
-        ApplyModifierForType(ref __instance.m_damage.m_fire, modifiers.m_fire, HitData.DamageType.Fire, isPlayerContext, ref normalDmg, ref resistantDmg, ref weakDmg, ref immuneDmg);
-        ApplyModifierForType(ref __instance.m_damage.m_frost, modifiers.m_frost, HitData.DamageType.Frost, isPlayerContext, ref normalDmg, ref resistantDmg, ref weakDmg, ref immuneDmg);
-        ApplyModifierForType(ref __instance.m_damage.m_lightning, modifiers.m_lightning, HitData.DamageType.Lightning, isPlayerContext, ref normalDmg, ref resistantDmg, ref weakDmg, ref immuneDmg);
-        ApplyModifierForType(ref __instance.m_damage.m_poison, modifiers.m_poison, HitData.DamageType.Poison, isPlayerContext, ref normalDmg, ref resistantDmg, ref weakDmg, ref immuneDmg);
-        ApplyModifierForType(ref __instance.m_damage.m_spirit, modifiers.m_spirit, HitData.DamageType.Spirit, isPlayerContext, ref normalDmg, ref resistantDmg, ref weakDmg, ref immuneDmg);
+        ApplyModifierForType(ref __instance.m_damage.m_blunt, modifiers.m_blunt, HitData.DamageType.Blunt, profile, ref normalDmg, ref resistantDmg, ref weakDmg, ref immuneDmg);
+        ApplyModifierForType(ref __instance.m_damage.m_slash, modifiers.m_slash, HitData.DamageType.Slash, profile, ref normalDmg, ref resistantDmg, ref weakDmg, ref immuneDmg);
+        ApplyModifierForType(ref __instance.m_damage.m_pierce, modifiers.m_pierce, HitData.DamageType.Pierce, profile, ref normalDmg, ref resistantDmg, ref weakDmg, ref immuneDmg);
+        ApplyModifierForType(ref __instance.m_damage.m_chop, modifiers.m_chop, HitData.DamageType.Chop, profile, ref normalDmg, ref resistantDmg, ref weakDmg, ref immuneDmg);
+        ApplyModifierForType(ref __instance.m_damage.m_pickaxe, modifiers.m_pickaxe, HitData.DamageType.Pickaxe, profile, ref normalDmg, ref resistantDmg, ref weakDmg, ref immuneDmg);
+        ApplyModifierForType(ref __instance.m_damage.m_fire, modifiers.m_fire, HitData.DamageType.Fire, profile, ref normalDmg, ref resistantDmg, ref weakDmg, ref immuneDmg);
+        ApplyModifierForType(ref __instance.m_damage.m_frost, modifiers.m_frost, HitData.DamageType.Frost, profile, ref normalDmg, ref resistantDmg, ref weakDmg, ref immuneDmg);
+        ApplyModifierForType(ref __instance.m_damage.m_lightning, modifiers.m_lightning, HitData.DamageType.Lightning, profile, ref normalDmg, ref resistantDmg, ref weakDmg, ref immuneDmg);
+        ApplyModifierForType(ref __instance.m_damage.m_poison, modifiers.m_poison, HitData.DamageType.Poison, profile, ref normalDmg, ref resistantDmg, ref weakDmg, ref immuneDmg);
+        ApplyModifierForType(ref __instance.m_damage.m_spirit, modifiers.m_spirit, HitData.DamageType.Spirit, profile, ref normalDmg, ref resistantDmg, ref weakDmg, ref immuneDmg);
+
+        // Valheim 1.0 added this channel. Do not leave its resistance unprocessed
+        // when replacing ApplyResistance; it has no configurable player minimum.
+        ApplyModifierForType(ref __instance.m_damage.m_nonPlayer, modifiers.m_nonPlayer, HitData.DamageType.NonPlayer, profile, ref normalDmg, ref resistantDmg, ref weakDmg, ref immuneDmg);
 
         significantModifier = DetermineSignificantModifier(normalDmg, resistantDmg, weakDmg, immuneDmg);
         return false;
@@ -268,13 +412,13 @@ internal static class HitDataApplyResistancePatch
         ref float damage,
         HitData.DamageModifier mod,
         HitData.DamageType damageType,
-        bool isPlayerContext,
+        DamageModifierProfile profile,
         ref float normalDmg,
         ref float resistantDmg,
         ref float weakDmg,
         ref float immuneDmg)
     {
-        float minimumDamageTakenMultiplier = isPlayerContext
+        float minimumDamageTakenMultiplier = profile == DamageModifierProfile.Player
             ? AdditiveDamageModifierPlugin.GetMinimumDamageTakenMultiplier(damageType)
             : 0f;
 
@@ -282,6 +426,7 @@ internal static class HitDataApplyResistancePatch
             damage,
             mod,
             minimumDamageTakenMultiplier,
+            profile,
             ref normalDmg,
             ref resistantDmg,
             ref weakDmg,
@@ -313,29 +458,6 @@ internal static class HitDataApplyResistancePatch
     }
 }
 
-[HarmonyPatch(typeof(HitData), nameof(HitData.ApplyModifier))]
-internal static class HitDataApplyModifierPatch
-{
-    [HarmonyPatch(new[] { typeof(float), typeof(HitData.DamageModifier), typeof(float), typeof(float), typeof(float), typeof(float) }, new[] { ArgumentType.Normal, ArgumentType.Normal, ArgumentType.Ref, ArgumentType.Ref, ArgumentType.Ref, ArgumentType.Ref })]
-    private static bool Prefix(
-        float baseDamage,
-        HitData.DamageModifier mod,
-        ref float normalDmg,
-        ref float resistantDmg,
-        ref float weakDmg,
-        ref float immuneDmg,
-        ref float __result)
-    {
-        if (AdditiveDamageMath.IsCustomModifier(mod))
-        {
-            __result = AdditiveDamageMath.ApplyModifier(baseDamage, mod, 0f, ref normalDmg, ref resistantDmg, ref weakDmg, ref immuneDmg);
-            return false;
-        }
-
-        return true;
-    }
-}
-
 [HarmonyPatch(typeof(Player), "UpdateEnvStatusEffects")]
 internal static class PlayerEnvStatusImmunityPatch
 {
@@ -350,7 +472,7 @@ internal static class PlayerEnvStatusImmunityPatch
             return modifier;
         }
 
-        float frostDelta = AdditiveDamageMath.ModifierToDelta(modifier);
+        float frostDelta = AdditiveDamageMath.ModifierToDelta(modifier, DamageModifierProfile.Player);
         float threshold = AdditiveDamageModifierPlugin.GetFrostEnvImmunityTriggerDelta();
         bool immuneByThreshold = frostDelta <= threshold;
 
