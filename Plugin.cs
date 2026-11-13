@@ -17,7 +17,7 @@ namespace AdditiveDamageModifier;
 public class AdditiveDamageModifierPlugin : BaseUnityPlugin
 {
     internal const string ModName = "AdditiveDamageModifier";
-    internal const string ModVersion = "1.2.5";
+    internal const string ModVersion = "1.2.6";
     internal const string Author = "sighsorry";
     private const string ModGUID = $"{Author}.{ModName}";
     internal const string PathOfValheimanGuid = "treextr.pathofvalheiman";
